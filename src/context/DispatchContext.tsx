@@ -29,11 +29,11 @@ import {
   DEFAULT_SHEET_URL,
   DRIVERS,
   WAREHOUSES,
-  fetchOrdersFromSheet,
   getMockOrders,
   updateSheetOrderStatus,
   testSheetWebhookConnection,
 } from "@/services/sheetsService";
+import { fetchOrdersWithResilience } from "@/services/sheetsSyncService";
 import {
   playNewOrderSound,
   playSuccessSound,
@@ -1013,7 +1013,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     try {
       const fetched =
         sourceMode === "sheets" && sheetUrl
-          ? await fetchOrdersFromSheet(sheetUrl)
+          ? await fetchOrdersWithResilience(sheetUrl)
           : getMockOrders();
 
       // Delta merge: never bluntly overwrite orders with setOrders(fetched)
@@ -1166,18 +1166,32 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Background polling with Delta Merge
+  // Adaptive polling: one request at a time, with an immediate refresh when visible.
   useEffect(() => {
     if (sourceMode !== "sheets" || !sheetUrl) return;
     failures.current = 0;
-    void syncNow();
-    const id = setInterval(() => void syncNow(), Math.max(30, pollingSeconds) * 1000);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
+    const schedule = (delay: number) => {
+      if (!disposed) timer = setTimeout(run, delay);
+    };
+    const run = async () => {
+      await syncNow();
+      if (disposed) return;
+      const retryDelay = failures.current > 0 ? Math.min(30, 5 * 2 ** (failures.current - 1)) : pollingSeconds;
+      schedule(retryDelay * 1000);
+    };
+    void run();
     const onVisible = () => {
-      if (document.visibilityState === "visible") void syncNow();
+      if (document.visibilityState === "visible") {
+        if (timer) clearTimeout(timer);
+        void run();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      clearInterval(id);
+      disposed = true;
+      if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

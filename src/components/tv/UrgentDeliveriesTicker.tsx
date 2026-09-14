@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
@@ -190,7 +190,7 @@ export function UrgentDeliveriesTicker() {
   // Settings & display state
   const [filter, setFilter] = useState<"all" | "critical" | "loading" | "en_route">("all");
   const [isPaused, setIsPaused] = useState(false);
-  const [viewMode, setViewMode] = useState<"marquee" | "carousel">("marquee");
+  const [viewMode] = useState<"marquee" | "carousel">("carousel");
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(1); // 1x, 1.5x, 2x
   const [direction, setDirection] = useState<"rtl" | "ltr">("rtl");
@@ -234,7 +234,7 @@ export function UrgentDeliveriesTicker() {
     if (viewMode !== "carousel" || isPaused || filteredItems.length <= 1) return;
     const interval = setInterval(() => {
       setCarouselIndex((prev) => (prev + 1) % filteredItems.length);
-    }, 5500);
+    }, 7000);
     return () => clearInterval(interval);
   }, [viewMode, isPaused, filteredItems.length]);
 
@@ -377,46 +377,6 @@ export function UrgentDeliveriesTicker() {
             {isPaused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
             <span className="hidden sm:inline">{isPaused ? "המשך" : "השהה"}</span>
           </button>
-
-          {/* Speed Toggle */}
-          <button
-            onClick={() => {
-              setSpeedMultiplier((curr) => (curr === 1 ? 1.5 : curr === 1.5 ? 2 : 1));
-            }}
-            className="flex items-center gap-1 rounded-xl bg-secondary px-2 py-1 text-xs font-bold text-muted-foreground ring-1 ring-border transition hover:text-foreground"
-            title="מהירות גלילת מבזק"
-          >
-            <Gauge className="size-3.5" />
-            <span className="tabular-nums">{speedMultiplier}x</span>
-          </button>
-
-          {/* Mode Switcher: Marquee vs Carousel */}
-          <div className="flex items-center rounded-xl bg-secondary p-0.5 ring-1 ring-border">
-            <button
-              onClick={() => setViewMode("marquee")}
-              className={cn(
-                "rounded-lg p-1.5 transition",
-                viewMode === "marquee"
-                  ? "bg-background text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              title="תצוגת פס רץ רציף (Marquee)"
-            >
-              <Layers className="size-3.5" />
-            </button>
-            <button
-              onClick={() => setViewMode("carousel")}
-              className={cn(
-                "rounded-lg p-1.5 transition",
-                viewMode === "carousel"
-                  ? "bg-background text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              title="תצוגת כרטיס ממוקד (קרוסלה)"
-            >
-              <Maximize2 className="size-3.5" />
-            </button>
-          </div>
 
           {/* View All Urgent List Button */}
           <button
