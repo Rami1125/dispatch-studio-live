@@ -244,11 +244,12 @@ export function parseOrdersCsv(csv: string): Order[] {
 
   const c = {
     orderId: idx("מספר הזמנה", "הזמנה", "orderId"),
-    customer: idx("שם הלקוח", "לקוח", "customerName"),
-    address: idx("כתובת", "address"),
+    customer: idx("שם לקוח", "שם הלקוח", "לקוח", "customerName"),
+    address: idx("כתובת פריקה", "כתובת", "address"),
     city: idx("עיר", "city"),
-    warehouse: idx("מחסן", "warehouse"),
-    driver: idx("נהג", "driver"),
+    warehouse: idx("מחסן יוצא", "מחסן", "warehouse"),
+    driver: idx("נהג מוקצה", "נהג", "driver"),
+    products: idx("פירוט מוצרים וכמויות", "פירוט מוצרים", "מוצרים"),
     targetTime: idx("שעת יעד", "שעה", "targetTime"),
     round: idx("סבב", "round"),
     status: idx("סטטוס", "status"),
