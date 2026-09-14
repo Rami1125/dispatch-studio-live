@@ -225,7 +225,7 @@ export function parseProductList(text: string, orderId = ""): OrderItem[] {
  * Multiple rows sharing the same order id are merged into one order with items.
  */
 export function parseOrdersCsv(csv: string): Order[] {
-  const lines = csv.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const lines = splitCsvRecords(csv);
   if (lines.length < 2) return [];
 
   const headers = parseCsvLine(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, "").trim());
