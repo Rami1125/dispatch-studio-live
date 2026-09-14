@@ -77,8 +77,8 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const [isStudioOpen, setStudioOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [sourceMode, setSourceModeState] = useState<DataSourceMode>("mock");
-  const [sheetUrl, setSheetUrl] = useState("");
-  const [pollingSeconds, setPollingSeconds] = useState(45);
+  const [sheetUrl, setSheetUrlState] = useState("");
+  const [pollingSeconds, setPollingSecondsState] = useState(45);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<DispatchState["syncStatus"]>("idle");
   const [syncError, setSyncError] = useState<string | null>(null);
