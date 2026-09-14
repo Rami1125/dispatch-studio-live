@@ -184,7 +184,7 @@ export function parseOrdersCsv(csv: string): Order[] {
   const lines = csv.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return [];
 
-  const headers = parseCsvLine(lines[0]).map((h) => h.replace(/^"|"$/g, "").trim());
+  const headers = parseCsvLine(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, "").trim());
   const idx = (...names: string[]) => {
     for (const n of names) {
       const i = headers.findIndex((h) => h === n);
@@ -215,7 +215,7 @@ export function parseOrdersCsv(csv: string): Order[] {
   const map = new Map<string, Order>();
 
   for (let i = 1; i < lines.length; i++) {
-    const cells = parseCsvLine(lines[i]).map((v) => v.replace(/^"|"$/g, ""));
+    const cells = parseCsvLine(lines[i] ?? "").map((v) => v.replace(/^"|"$/g, ""));
     const orderId = (c.orderId >= 0 ? cells[c.orderId] : "")?.trim();
     if (!orderId) continue;
 
