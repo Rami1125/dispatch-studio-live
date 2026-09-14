@@ -237,6 +237,59 @@ export default {
         }
       }
 
+      // Handle Replenishment / Log History into Google Sheets
+      if (url.pathname === "/api/sheets/log-history" && request.method === "POST") {
+        try {
+          const body = (await request.json()) as {
+            action?: string;
+            sheetName?: string;
+            caller?: string;
+            warehouse?: string;
+            summary?: string;
+            webhookUrl?: string;
+          };
+
+          const webhookUrl = body.webhookUrl || process.env.SHEETS_WEBHOOK_URL;
+          const sheetName = body.sheetName || "היסטוריית_שיחות_נועה";
+          const action = body.action || "REPLENISHMENT_DISPATCHED";
+
+          if (webhookUrl) {
+            await fetch(webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action,
+                sheetName,
+                caller: body.caller || "מחסנאי",
+                warehouse: body.warehouse || "ח. סבן",
+                summary: body.summary || "",
+                timestamp: new Date().toISOString(),
+              }),
+              redirect: "follow",
+            }).catch(() => null);
+          }
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              logged: true,
+              sheetName,
+              action,
+              timestamp: new Date().toISOString(),
+            }),
+            { status: 200, headers: { "content-type": "application/json; charset=utf-8" } },
+          );
+        } catch (err) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: err instanceof Error ? err.message : "Error logging replenishment",
+            }),
+            { status: 500, headers: { "content-type": "application/json; charset=utf-8" } },
+          );
+        }
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

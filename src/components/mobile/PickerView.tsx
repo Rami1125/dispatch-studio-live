@@ -30,10 +30,12 @@ import {
   MessageCircle,
   ExternalLink,
   X,
+  TrendingUp,
 } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import type { Order, OrderStatus } from "@/types/dispatch";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { InventoryDemandCard } from "./InventoryDemandCard";
 import {
   isAudioMuted,
   toggleAudioMute,
@@ -62,6 +64,7 @@ export function PickerView({ onSwitchToTv }: PickerViewProps) {
     syncStatus,
     toggleItemApproval,
     approveAllItems,
+    pushAlert,
   } = useDispatchBoard();
 
   const [selectedProfile, setSelectedProfile] = useState<PickerProfile>(() => {
@@ -417,6 +420,46 @@ export function PickerView({ onSwitchToTv }: PickerViewProps) {
             </button>
           </div>
         </div>
+
+        {/* Inventory Demand & 1-Click WhatsApp Reorder to Netanel */}
+        <InventoryDemandCard
+          orders={published}
+          warehouseName={
+            selectedProfile === "oren"
+              ? "סניף 4 החורש"
+              : selectedProfile === "tamir"
+                ? "סניף 1 התלמיד"
+                : "כל המחסנים (ח. סבן)"
+          }
+          warehouseBranchNumber={
+            selectedProfile === "oren" ? 4 : selectedProfile === "tamir" ? 1 : "all"
+          }
+          pickerName={
+            selectedProfile === "oren"
+              ? "אורן (סניף 4)"
+              : selectedProfile === "tamir"
+                ? "תמיר (סניף 1)"
+                : "מחסנאי ח. סבן"
+          }
+          onLogReplenishment={(summaryText) => {
+            pushAlert(summaryText, "success");
+            const callerName =
+              selectedProfile === "oren" ? "אורן" : selectedProfile === "tamir" ? "תמיר" : "מחסנאי";
+            const whName = selectedProfile === "oren" ? "סניף 4 החורש" : "סניף 1 התלמיד";
+            // Optional sync to Google Sheets log
+            fetch("/api/sheets/log-history", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "REPLENISHMENT_DISPATCHED",
+                sheetName: "היסטוריית_שיחות_נועה",
+                caller: callerName,
+                warehouse: whName,
+                summary: summaryText,
+              }),
+            }).catch(() => null);
+          }}
+        />
 
         {/* Orders List */}
         {filteredOrders.length === 0 ? (
