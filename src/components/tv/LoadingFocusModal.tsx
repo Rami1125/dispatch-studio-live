@@ -48,7 +48,7 @@ export function LoadingFocusModal({ order }: { order: Order | null }) {
             </div>
           </div>
 
-          <div className="grid flex-1 grid-cols-2 gap-3 overflow-hidden p-4 xl:grid-cols-3">
+          <div className="grid flex-1 grid-cols-1 gap-3 overflow-y-auto p-4 2xl:grid-cols-2">
             {order.items.map((it, i) => (
               <motion.div
                 key={it.sku}

@@ -41,7 +41,7 @@ function RoundSection({ round, orders }: { round: number; orders: Order[] }) {
         </span>
         <div className="h-px flex-1 bg-border" />
       </div>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">
         <AnimatePresence mode="popLayout">
           {orders.map((o, i) => (
             <OrderCard key={o.orderId} order={o} index={i} />
