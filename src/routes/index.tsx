@@ -62,7 +62,11 @@ function LiveBoard() {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const modeParam = urlParams.get("mode");
-      if (modeParam === "picker" || modeParam === "tv") return modeParam;
+      const pickerParam = urlParams.get("picker");
+      if (modeParam === "picker" || pickerParam === "oren" || pickerParam === "tamir") {
+        return "picker";
+      }
+      if (modeParam === "tv") return "tv";
 
       const saved = localStorage.getItem("saban_view_mode");
       if (saved === "picker" || saved === "tv") return saved;
