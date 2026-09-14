@@ -213,9 +213,7 @@ export default {
             JSON.stringify({
               success: false,
               error:
-                json?.error ||
-                text.slice(0, 200) ||
-                `תגובה לא צפויה מ-Webhook (${testRes.status})`,
+                json?.error || text.slice(0, 200) || `תגובה לא צפויה מ-Webhook (${testRes.status})`,
             }),
             { status: 200, headers: { "content-type": "application/json; charset=utf-8" } },
           );

@@ -550,4 +550,3 @@ function handleStatusUpdate(params) {
   })).setMimeType(ContentService.MimeType.JSON);
 }
 `;
-
