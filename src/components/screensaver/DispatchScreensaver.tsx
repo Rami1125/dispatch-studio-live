@@ -25,10 +25,14 @@ import {
   Package,
   Share2,
   ExternalLink,
+  Folder,
+  Presentation,
 } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import { computeProductAnalytics, getDailyInventoryInsights } from "@/services/analyticsService";
 import { ARTERIAL_ROUTES, calculateDriverETAs } from "@/services/trafficService";
+import { DriveMediaPlayer } from "./DriveMediaPlayer";
+import { InventoryAlertSlide } from "./InventoryAlertSlide";
 import type { ScreensaverMode } from "@/types/screensaver";
 import { cn } from "@/lib/utils";
 
@@ -60,9 +64,10 @@ export function DispatchScreensaver() {
     generateAIBriefing,
     isGeneratingAI,
     alerts,
+    syncNow,
   } = useDispatchBoard();
 
-  const [activeTab, setActiveTab] = useState<ScreensaverMode>(screensaverSettings.activeMode);
+  const [activeTab, setActiveTab] = useState<ScreensaverMode>("INVENTORY_ALERT");
   const [selectedVideoTheme, setSelectedVideoTheme] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState<string>("");
@@ -104,16 +109,20 @@ export function DispatchScreensaver() {
   // Auto-cycle through views if enabled
   useEffect(() => {
     if (!isScreensaverActive || !screensaverSettings.autoCycle) return;
-    // Include STOCK_ALERT if there are high-demand or normal daily insights
-    const modes: ScreensaverMode[] =
-      inventoryInsights.length > 0
-        ? ["analytics", "STOCK_ALERT", "traffic", "video"]
-        : ["analytics", "traffic", "video"];
+    // Include INVENTORY_ALERT, STOCK_ALERT and drive_media in cycle
+    const modes: ScreensaverMode[] = [
+      "INVENTORY_ALERT",
+      "analytics",
+      "STOCK_ALERT",
+      "drive_media",
+      "traffic",
+      "video",
+    ];
     const id = setInterval(
       () => {
         setActiveTab((prev) => {
           const nextIdx = (modes.indexOf(prev) + 1) % modes.length;
-          return modes[nextIdx] ?? "analytics";
+          return modes[nextIdx] ?? "INVENTORY_ALERT";
         });
       },
       (screensaverSettings.cycleIntervalSeconds || 12) * 1000,
@@ -189,6 +198,19 @@ export function DispatchScreensaver() {
           {/* Mode Selector Tabs */}
           <div className="flex items-center gap-1 rounded-xl bg-slate-800/80 p-1 ring-1 ring-slate-700/60">
             <button
+              onClick={() => setActiveTab("INVENTORY_ALERT")}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition relative",
+                activeTab === "INVENTORY_ALERT"
+                  ? "bg-amber-600 text-white shadow-sm ring-1 ring-amber-400"
+                  : "text-slate-400 hover:text-white",
+              )}
+            >
+              <Flame className="size-4 text-amber-400" />
+              <span>🚨 משיכת מלאי (עמודה H)</span>
+              <span className="size-2 rounded-full bg-red-500 animate-ping absolute -top-1 -right-1" />
+            </button>
+            <button
               onClick={() => setActiveTab("analytics")}
               className={cn(
                 "flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition",
@@ -214,6 +236,18 @@ export function DispatchScreensaver() {
               {inventoryInsights.some((i) => i.alertLevel === "HIGH") && (
                 <span className="size-2 rounded-full bg-red-500 animate-ping absolute -top-1 -right-1" />
               )}
+            </button>
+            <button
+              onClick={() => setActiveTab("drive_media")}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition relative",
+                activeTab === "drive_media"
+                  ? "bg-purple-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white",
+              )}
+            >
+              <Folder className="size-4 text-purple-400" />
+              <span>מדיה מדרייב (וידאו ומצגות)</span>
             </button>
             <button
               onClick={() => setActiveTab("traffic")}
@@ -479,6 +513,19 @@ export function DispatchScreensaver() {
               </motion.div>
             )}
 
+            {activeTab === "INVENTORY_ALERT" && (
+              <motion.div
+                key="inventory-alert-view"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.35 }}
+                className="h-full flex-1"
+              >
+                <InventoryAlertSlide orders={published} onRefresh={syncNow} />
+              </motion.div>
+            )}
+
             {activeTab === "STOCK_ALERT" && (
               <motion.div
                 key="stock-alert-view"
@@ -665,6 +712,19 @@ export function DispatchScreensaver() {
                     </div>
                   );
                 })()}
+              </motion.div>
+            )}
+
+            {activeTab === "drive_media" && (
+              <motion.div
+                key="drive-media-view"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.35 }}
+                className="h-full flex-1"
+              >
+                <DriveMediaPlayer onActivity={() => {}} isScreensaverActive={isScreensaverActive} />
               </motion.div>
             )}
 

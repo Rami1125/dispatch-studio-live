@@ -48,6 +48,7 @@ export interface Order {
   readyForLoadingAt?: number;
   assignedPicker?: string;
   deposits?: string[];
+  itemsFormatted?: string;
 }
 
 export type AlertLevel = "info" | "warning" | "critical" | "success";

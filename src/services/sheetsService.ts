@@ -26,24 +26,132 @@ const item = (sku: string, name: string, quantity: number, isApproved = false): 
 
 export const MOCK_ORDERS: Order[] = [
   {
+    orderId: "6215454",
+    customerName: "שחר שאול תכנון",
+    address: "משיכה עצמית מחסן 4 החרש",
+    city: "כפר סבא",
+    warehouse: "🏭 4️⃣(החרש)",
+    driver: "נהג הלקוח (איסוף עצמי)",
+    targetTime: "12:00",
+    round: 1,
+    status: "בהכנה",
+    logisticsMetrics: { bellaBags: 2, sabanPallets: 2, estimatedWeightKg: 3800 },
+    itemsFormatted:
+      '2 סומסום, 80 ריצופית אפור, 30 פלסטומר 603, 12 גבס כחול, 10 מסלול 70, 20 ניצב 70, 1 אלסטוסיל SE980, 4 מלט, 4 טיט, 15 בלוק 7, 1 רשת טיח ממ"ד',
+    items: [
+      item("11511", "סומסום בלה", 2, true),
+      item("60088", "ריצופית אפור", 80, true),
+      item("60089", "פלסטומר 603", 30),
+      item("10002", "מלט אפור 25 ק״ג", 4),
+      item("11551", "טיט שק", 4),
+      item("18094", "בלוק 7", 15),
+    ],
+    note: "איסוף עצמי עד 12:00",
+  },
+  {
     orderId: "6215440",
-    customerName: "ערוגת הבשם",
-    address: "רחוב התעשייה 12",
-    city: "מודיעין עילית",
-    warehouse: "מחסן 4",
-    driver: "חכמת - משאית מרצדס מנוף",
+    customerName: 'מאריו הנדסה בע"מ',
+    address: "בר אילן 8",
+    city: "רעננה",
+    warehouse: "מחסן 4 החרש",
+    driver: "חכמת (מרצדס מנוף)",
     targetTime: "11:00",
     round: 2,
-    status: "בהעמסה",
-    logisticsMetrics: { bellaBags: 12, sabanPallets: 8, estimatedWeightKg: 7400 },
+    status: "סופק",
+    logisticsMetrics: { bellaBags: 5, sabanPallets: 1, estimatedWeightKg: 6200 },
+    itemsFormatted:
+      '2 סומסום בלה, 3 חול בלה, 6 מלט אפור 25 ק"ג, 10 טיח גבס MP75, 1 הובלת מנוף כ"ס-רעננה',
     items: [
-      item("11511", "סומסום שק גדול", 24, true),
-      item("11551", "טיט שק גדול", 16, true),
-      item("10002", "מלט אפור 25 ק״ג", 60),
-      item("14604", "חול מחצבה שק", 30),
-      item("18094", "בלוק איטונג 20", 48),
+      item("11511", "סומסום בלה", 2, true),
+      item("11501", "חול בלה", 3, true),
+      item("10002", "מלט אפור 25 ק״ג", 6, true),
+      item("11551", "טיח גבס MP75", 10, true),
     ],
-    note: "פריקה בחצר האחורית, נדרש מנוף",
+    note: "סופק במלואו ברעננה",
+  },
+  {
+    orderId: "6215462",
+    customerName: "אילתי אברהם/כללי (אבי אילתי)",
+    address: "מגדל הלבנון 14",
+    city: "מודיעין",
+    warehouse: "🏭 4️⃣(החרש)",
+    driver: "חכמת (משאית מרצדס מנוף 615-41-002)",
+    targetTime: "08:00",
+    round: 1,
+    status: "בהעמסה",
+    logisticsMetrics: { bellaBags: 11, sabanPallets: 1, estimatedWeightKg: 13500 },
+    itemsFormatted:
+      '8 סומסום שק גדול, 3 טיט שק גדול, 20 מלט אפור 25 ק"ג, 1 הובלת מנוף מודיעין (18094)',
+    items: [
+      item("11511", "סומסום שק גדול", 8, true),
+      item("11551", "טיט שק גדול", 3, true),
+      item("10002", "מלט אפור 25 ק״ג", 20, true),
+    ],
+    note: "מנוף פריקה מודיעין",
+  },
+  {
+    orderId: "6215463",
+    customerName: "השוקדים-כללי (ירון)",
+    address: "חנין בית חולים מאיר 1",
+    city: "כפר סבא",
+    warehouse: "🏭 4️⃣(החרש)",
+    driver: "עלי (משאית איסוזו פתוחה 651-51-701)",
+    targetTime: "08:30",
+    round: 1,
+    status: "מוכן להעמסה",
+    logisticsMetrics: { bellaBags: 0, sabanPallets: 0, estimatedWeightKg: 1900 },
+    itemsFormatted:
+      '25 מלט אפור 25 ק"ג, 25 טיט שק, 1 פוליגג משוריין 20 ק"ג, 1 מברשת זפת, הובלה ללא פריקה כ"ס-רעננה (818055)',
+    items: [
+      item("10002", "מלט אפור 25 ק״ג", 25, true),
+      item("11551", "טיט שק", 25, true),
+      item("11600", "פוליגג משוריין 20 ק״ג", 1),
+    ],
+    note: "הובלה ללא פריקה",
+  },
+  {
+    orderId: "6215465",
+    customerName: "פנינית ומור בר",
+    address: "איגוז 9",
+    city: "בני ציון",
+    warehouse: "🏭 4️⃣(החרש)",
+    driver: "חכמת (מרצדס מנוף)",
+    targetTime: "07:30",
+    round: 1,
+    status: "בהכנה",
+    logisticsMetrics: { bellaBags: 5, sabanPallets: 6, estimatedWeightKg: 14200 },
+    itemsFormatted:
+      "25 מלט אפור, 300 בלוק 20, 150 בלוק 10, 1 חול בלה, 2 סומסום בלה, 2 טיט בלה, 1 רשת טיח",
+    items: [
+      item("10002", "מלט אפור", 25),
+      item("18094", "בלוק 20", 300),
+      item("18095", "בלוק 10", 150),
+      item("11501", "חול בלה", 1),
+      item("11511", "סומסום בלה", 2),
+      item("11551", "טיט בלה", 2),
+    ],
+    note: "5 משטחי בלוקים, 1 משטח סבן, 5 בלות",
+  },
+  {
+    orderId: "6215473",
+    customerName: "קדם גלעד",
+    address: "מזל דלי 1",
+    city: "הוד השרון",
+    warehouse: "מחסן 4 החרש",
+    driver: "חכמת (מרצדס מנוף)",
+    targetTime: "14:00",
+    round: 2,
+    status: "ממתין",
+    logisticsMetrics: { bellaBags: 0, sabanPallets: 2, estimatedWeightKg: 2800 },
+    itemsFormatted:
+      '30 לוח עץ פיני 3 מטר, 50 מייק 10, 6 שליכט בגר, 6 איסכורית 2 מטר, 2 רשת צל, 2 רשת ממ"ד, מנוף הוד השרון',
+    items: [
+      item("19001", "לוח עץ פיני 3 מטר", 30),
+      item("19002", "מייק 10", 50),
+      item("11551", "שליכט בגר", 6),
+      item("19003", "איסכורית 2 מטר", 6),
+    ],
+    note: "מנוף הוד השרון",
   },
   {
     orderId: "6215441",
@@ -54,76 +162,13 @@ export const MOCK_ORDERS: Order[] = [
     driver: "אורן - משאית וולוו מנוף",
     targetTime: "11:30",
     round: 2,
-    status: "ממתין",
+    status: "יצא לדרך",
     logisticsMetrics: { bellaBags: 6, sabanPallets: 4, estimatedWeightKg: 5200 },
+    itemsFormatted: '80 מלט אפור 25 ק"ג, 10 טיט שק גדול, 4 משטחי סבן',
     items: [
       item("10002", "מלט אפור 25 ק״ג", 80),
       item("11551", "טיט שק גדול", 10),
       item("60060", "משטחי סבן", 4),
-    ],
-  },
-  {
-    orderId: "6215442",
-    customerName: "אחים כהן בנייה",
-    address: "הרצל 88",
-    city: "ירושלים",
-    warehouse: "מחסן 4",
-    driver: "סאמר - משאית סקניה צד",
-    targetTime: "09:45",
-    round: 1,
-    status: "יצא לדרך",
-    logisticsMetrics: { bellaBags: 18, sabanPallets: 12, estimatedWeightKg: 9100 },
-    items: [
-      item("14604", "חול מחצבה שק", 50, true),
-      item("18094", "בלוק איטונג 20", 64, true),
-      item("60002", "שקי בלה", 18, true),
-    ],
-  },
-  {
-    orderId: "6215443",
-    customerName: "שיא הבנייה בע״מ",
-    address: "אזור תעשייה מערב 22",
-    city: "מודיעין",
-    warehouse: "מחסן 7",
-    driver: "יוסי - טנדר הפצה",
-    targetTime: "08:30",
-    round: 1,
-    status: "סופק",
-    logisticsMetrics: { bellaBags: 4, sabanPallets: 2, estimatedWeightKg: 1800 },
-    items: [item("10002", "מלט אפור 25 ק״ג", 40, true), item("11511", "סומסום שק גדול", 12, true)],
-  },
-  {
-    orderId: "6215444",
-    customerName: "גינות הדר",
-    address: "הזית 5",
-    city: "בית שמש",
-    warehouse: "מחסן 30",
-    driver: "חכמת - משאית מרצדס מנוף",
-    targetTime: "13:15",
-    round: 3,
-    status: "ממתין",
-    logisticsMetrics: { bellaBags: 9, sabanPallets: 6, estimatedWeightKg: 4300 },
-    items: [
-      item("14604", "חול מחצבה שק", 36),
-      item("11551", "טיט שק גדול", 8),
-      item("60060", "משטחי סבן", 6),
-    ],
-  },
-  {
-    orderId: "6215445",
-    customerName: "בטון אלמוג",
-    address: "דרך העמק 17",
-    city: "רמלה",
-    warehouse: "מחסן 7",
-    driver: "אורן - משאית וולוו מנוף",
-    targetTime: "14:00",
-    round: 3,
-    status: "ממתין",
-    logisticsMetrics: { bellaBags: 15, sabanPallets: 10, estimatedWeightKg: 8800 },
-    items: [
-      item("18094", "בלוק איטונג 20", 96),
-      item("10002", "מלט אפור 25 ק״ג", 120),
-      item("60002", "שקי בלה", 15),
     ],
   },
 ];
@@ -261,8 +306,27 @@ export function parseOrdersCsv(csv: string): Order[] {
   const lines = splitCsvRecords(csv);
   if (lines.length < 2) return [];
 
-  const headers = parseCsvLine(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, "").trim());
-  // התאמה מדויקת ואם אין — התאמה חלקית (כותרות כמו "שקי בלה (60002)")
+  // Search first 10 lines for the actual header row
+  let headerRowIndex = 0;
+  let headers = parseCsvLine(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, "").trim());
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const candidate = parseCsvLine(lines[i] ?? "").map((h) => h.replace(/^"|"$/g, "").trim());
+    if (
+      candidate.some(
+        (h) =>
+          h.includes("הזמנה") ||
+          h.includes("לקוח") ||
+          h.includes("מוצרים") ||
+          h.includes("סבב ושעה"),
+      )
+    ) {
+      headerRowIndex = i;
+      headers = candidate;
+      break;
+    }
+  }
+
+  // התאמה מדויקת ואם אין — התאמה חלקית
   const idx = (...names: string[]) => {
     for (const n of names) {
       const i = headers.findIndex((h) => h === n);
@@ -278,14 +342,15 @@ export function parseOrdersCsv(csv: string): Order[] {
   const c = {
     orderId: idx("מספר הזמנה", "הזמנה", "orderId"),
     customer: idx("שם לקוח", "שם הלקוח", "לקוח", "customerName"),
-    address: idx("כתובת פריקה", "כתובת", "address"),
+    address: idx("כתובת פריקה", "כתובת יעד ועיר", "כתובת", "address"),
     city: idx("עיר", "city"),
-    warehouse: idx("מחסן יוצא", "מחסן", "warehouse"),
-    driver: idx("נהג מוקצה", "נהג", "driver"),
-    products: idx("פירוט מוצרים וכמויות", "פירוט מוצרים", "מוצרים"),
+    warehouse: idx("מחסן יוצא", "מחסן מקור", "מחסן", "warehouse"),
+    driver: idx("נהג מוקצה", "נהג משובץ", "נהג", "driver"),
+    products: idx("פירוט מוצרים וכמויות", "פירוט מוצרים", "מוצרים", "itemsFormatted"),
     targetTime: idx("שעת יעד", "שעה", "targetTime"),
-    round: idx("סבב", "round"),
-    status: idx("סטטוס", "status"),
+    round: idx("סבב ושעה", "סבב", "round"),
+    status: idx("סטטוס ביצוע", "סטטוס", "status"),
+    deposits: idx("פקדונות", "בלות/משטחים", "פקדונות (בלות/משטחים)"),
     bella: idx("שקי בלה", "60002"),
     pallets: idx("משטחי סבן", "60060"),
     weight: idx("משקל", "משקל משוער", "weight"),
@@ -298,29 +363,57 @@ export function parseOrdersCsv(csv: string): Order[] {
 
   const map = new Map<string, Order>();
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = headerRowIndex + 1; i < lines.length; i++) {
     const cells = parseCsvLine(lines[i] ?? "").map((v) => v.replace(/^"|"$/g, ""));
     const orderId = (c.orderId >= 0 ? cells[c.orderId] : "")?.trim();
-    if (!orderId) continue;
+    // Skip empty rows, header rows repeated, or archive section separators
+    if (!orderId || orderId.includes("הזמנה") || orderId.length > 20) continue;
 
     if (!map.has(orderId)) {
       const rawDate = (c.updatedAt >= 0 ? cells[c.updatedAt] : "")?.trim();
+      const roundCell = (c.round >= 0 ? cells[c.round] : "") || "";
+      let targetTime = (c.targetTime >= 0 ? cells[c.targetTime] : "")?.trim() || "";
+      if (!targetTime || targetTime === "--:--") {
+        const timeMatch = roundCell.match(/(\d{1,2}:\d{2})/);
+        if (timeMatch) {
+          targetTime = timeMatch[1];
+        } else {
+          targetTime = "11:00";
+        }
+      }
+
+      const roundMatch = roundCell.match(/סבב\s*(\d+)/);
+      const roundNum = roundMatch ? Number(roundMatch[1]) : toNumber(roundCell) || 1;
+
+      // Extract deposits if available (e.g. "2 בלות (60002), 2 משטחי סבן (60060)")
+      const depositsCell = (c.deposits >= 0 ? cells[c.deposits] : "")?.trim();
+      let bellaCount = toNumber(c.bella >= 0 ? cells[c.bella] : "");
+      let palletsCount = toNumber(c.pallets >= 0 ? cells[c.pallets] : "");
+
+      if (depositsCell) {
+        const bellaMatch = depositsCell.match(/(\d+)\s*(?:בלות|בלה)/);
+        if (bellaMatch && !bellaCount) bellaCount = Number(bellaMatch[1]);
+        const palletMatch = depositsCell.match(/(\d+)\s*(?:משטחי סבן|משטחים)/);
+        if (palletMatch && !palletsCount) palletsCount = Number(palletMatch[1]);
+      }
+
       map.set(orderId, {
         orderId,
         customerName: (c.customer >= 0 ? cells[c.customer] : "") || "ללא שם",
         address: (c.address >= 0 ? cells[c.address] : "") || "",
         city: (c.city >= 0 ? cells[c.city] : "") || "",
-        warehouse: (c.warehouse >= 0 ? cells[c.warehouse] : "") || "",
+        warehouse: (c.warehouse >= 0 ? cells[c.warehouse] : "") || "מגרש 4 החרש",
         driver: (c.driver >= 0 ? cells[c.driver] : "") || "לא שובץ",
-        targetTime: (c.targetTime >= 0 ? cells[c.targetTime] : "") || "--:--",
-        round: toNumber(c.round >= 0 ? cells[c.round] : "1") || 1,
+        targetTime,
+        round: roundNum,
         status: toStatus(c.status >= 0 ? cells[c.status] : undefined),
         logisticsMetrics: {
-          bellaBags: toNumber(c.bella >= 0 ? cells[c.bella] : ""),
-          sabanPallets: toNumber(c.pallets >= 0 ? cells[c.pallets] : ""),
+          bellaBags: bellaCount,
+          sabanPallets: palletsCount,
           estimatedWeightKg: toNumber(c.weight >= 0 ? cells[c.weight] : ""),
         },
         items: [],
+        itemsFormatted: "",
         updatedAt: rawDate || new Date().toISOString(),
       });
     }
@@ -329,8 +422,11 @@ export function parseOrdersCsv(csv: string): Order[] {
 
     // פורמט שורה-אחת-להזמנה: כל המוצרים בתא טקסט אחד
     const productsCell = (c.products >= 0 ? cells[c.products] : "")?.trim();
-    if (productsCell && order.items.length === 0) {
-      order.items = parseProductList(productsCell, orderId);
+    if (productsCell) {
+      order.itemsFormatted = productsCell;
+      if (order.items.length === 0) {
+        order.items = parseProductList(productsCell, orderId);
+      }
     }
 
     const sku = (c.sku >= 0 ? cells[c.sku] : "")?.trim();

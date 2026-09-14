@@ -14,6 +14,8 @@ import {
   Trash2,
   Truck,
   Video,
+  Folder,
+  ExternalLink,
 } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import type { AlertLevel } from "@/types/dispatch";
@@ -482,6 +484,33 @@ export function AITrainerStudio() {
               onChange={(e) => updateScreensaverSettings({ autoVideoOnLull: e.target.checked })}
               className="size-4 rounded border-border"
             />
+          </div>
+
+          {/* Google Drive Media Folder */}
+          <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3">
+            <div className="flex items-center gap-2">
+              <Folder className="size-4 text-purple-400" />
+              <div>
+                <div className="flex items-center gap-2 font-bold text-foreground">
+                  <span>מדיה ומצגות מ-Google Drive</span>
+                  <span className="font-mono text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
+                    1SZdhFhiCx1X3FdXF7Rr4lQ3-7Tc0xSDr
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  סנכרון סרטוני הדרכה ומצגות Google Slides ישירות לשומר המסך
+                </div>
+              </div>
+            </div>
+            <a
+              href="https://drive.google.com/drive/folders/1SZdhFhiCx1X3FdXF7Rr4lQ3-7Tc0xSDr"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary hover:underline flex items-center gap-1 font-semibold"
+            >
+              <span>פתח תיקייה</span>
+              <ExternalLink className="size-3" />
+            </a>
           </div>
         </div>
       )}

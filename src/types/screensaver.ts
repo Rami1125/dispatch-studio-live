@@ -1,4 +1,56 @@
-export type ScreensaverMode = "analytics" | "traffic" | "video" | "mixed" | "STOCK_ALERT";
+export type ScreensaverMode =
+  "analytics" | "traffic" | "video" | "mixed" | "STOCK_ALERT" | "INVENTORY_ALERT" | "drive_media";
+
+export interface ParsedProductItem {
+  raw: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  category: "cement" | "big_bag" | "block" | "dry_mix" | "other";
+  sku?: string;
+}
+
+export interface InventoryAggregationSummary {
+  totalCementBags: number;
+  cementPallets: number;
+  isCementHighDemand: boolean;
+  cementReorderRecommendation: string;
+
+  totalBigBags: number;
+  bigBagsBreakdown: {
+    sesame: number;
+    sand: number;
+    tit: number;
+    other: number;
+  };
+  isBigBagsQuarryAlert: boolean;
+  bigBagsReorderRecommendation: string;
+
+  totalBlocks: number;
+  blockPallets: number;
+  blocksBreakdown: Record<string, number>;
+
+  totalDryMixBags: number;
+  dryMixBreakdown: Record<string, number>;
+
+  ordersCount: number;
+  lastCalculatedAt: string;
+}
+
+export interface DriveMediaItem {
+  id: string;
+  name: string;
+  mimeType: string;
+  type: "video" | "presentation" | "other";
+  webViewLink?: string;
+  webContentLink?: string;
+  thumbnailLink?: string;
+  embedUrl: string;
+  downloadUrl?: string;
+  durationSeconds?: number;
+  sizeBytes?: number;
+  createdTime?: string;
+}
 
 export interface DailyInventoryInsight {
   sku: string;

@@ -1,5 +1,270 @@
 import type { Order } from "@/types/dispatch";
-import type { DailyInventoryInsight, ProductAnalyticsSummary } from "@/types/screensaver";
+import type {
+  DailyInventoryInsight,
+  InventoryAggregationSummary,
+  ParsedProductItem,
+  ProductAnalyticsSummary,
+} from "@/types/screensaver";
+
+/**
+ * Robust parser for Column H ("פירוט מוצרים וכמויות" / `itemsFormatted`).
+ * Handles multiple formats:
+ * - "20 מלט אפור 25 ק\"ג, 8 סומסום שק גדול, 3 טיט שק גדול"
+ * - "25 מלט אפור 25 ק\"ג, 25 טיט שק, 1 פוליגג משוריין 20 ק\"ג"
+ * - "1. 📦 מק\"ט: 10002 | מלט אפור 25 ק\"ג | כמות: 25"
+ * - "2 בלות סומסום, 3 בלות חול, 6 מלט אפור, 10 טיח MP75"
+ * - "25 מלט אפור, 300 בלוק 20, 150 בלוק 10, 1 חול בלה, 2 סומסום בלה"
+ */
+export function parseColumnHProductText(rawText: string): ParsedProductItem[] {
+  if (!rawText || !rawText.trim()) return [];
+
+  // Split by comma, semicolon, newline, or plus delimiter
+  const chunks = rawText
+    .split(/[,;\n]|\s\+\s/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  const results: ParsedProductItem[] = [];
+
+  for (const chunk of chunks) {
+    // Ignore service lines (freight, crane transport fees, etc.)
+    if (/הובלת מנוף|הובלה ללא פריקה|מנוף מודיעין|מנוף כ"ס|מנוף הוד השרון|הובלה/i.test(chunk)) {
+      continue;
+    }
+
+    // Pattern A: Pipe-delimited e.g. "1. 📦 מק"ט: 10002 | מלט אפור 25 ק"ג | כמות: 25"
+    if (chunk.includes("|")) {
+      const parts = chunk.split("|").map((p) => p.trim());
+      const namePart = parts[1] || "";
+      const qtyMatch = chunk.match(/כמות:?\s*(\d+(?:\.\d+)?)/);
+      const skuMatch = chunk.match(/מק["']?ט:?\s*(\d+)/);
+      const quantity = qtyMatch ? parseFloat(qtyMatch[1] || "1") : 1;
+      const sku = skuMatch ? skuMatch[1] : undefined;
+      const category = categorizeProduct(namePart, chunk);
+      const unit = extractUnit(chunk, category);
+
+      results.push({
+        raw: chunk,
+        name: namePart.replace(/📦/g, "").replace(/[\d.]/g, "").trim(),
+        quantity,
+        unit,
+        category,
+        sku,
+      });
+      continue;
+    }
+
+    // Pattern B: Leading quantity with optional unit and name
+    // e.g. "20 מלט אפור 25 ק\"ג", "2 בלות סומסום", "8 סומסום שק גדול", "300 בלוק 20"
+    let quantity = 1;
+    let unit = "";
+    let name = chunk;
+
+    const leadingMatch = chunk.match(
+      /^(\d+(?:\.\d+)?)\s*(?:(שק|שקים|בלה|בלות|שק גדול|שקי ענק|יח'|יח|פח|פחים|משטח|משטחים|חבילה|חבילות|לוח|לוחות|גליל|דלי|פחית)\s+)?(.*)$/i,
+    );
+
+    if (leadingMatch) {
+      quantity = parseFloat(leadingMatch[1] || "1");
+      unit = leadingMatch[2] || "";
+      name = (leadingMatch[3] || "").trim();
+    } else {
+      // Check if quantity is embedded at end e.g. "מלט אפור 25" or "בלוק 20 (50)"
+      const innerMatch = chunk.match(/(\d+(?:\.\d+)?)/);
+      if (innerMatch) {
+        quantity = parseFloat(innerMatch[1] || "1");
+        name = chunk
+          .replace(innerMatch[0], "")
+          .replace(/[-:()]/g, "")
+          .trim();
+      }
+    }
+
+    // Secondary check for unit at end e.g. "2 סומסום בלה", "8 סומסום שק גדול"
+    if (!unit) {
+      const endUnitMatch = name.match(/\s+(בלה|בלות|שק גדול|שקי ענק|שק|שקים|יח'|יח|משטח|לוח)$/i);
+      if (endUnitMatch) {
+        unit = endUnitMatch[1];
+      }
+    }
+
+    const category = categorizeProduct(name, chunk);
+    if (!unit) {
+      unit = extractUnit(name + " " + chunk, category);
+    }
+
+    results.push({
+      raw: chunk,
+      name,
+      quantity,
+      unit,
+      category,
+    });
+  }
+
+  return results;
+}
+
+function categorizeProduct(name: string, raw: string): ParsedProductItem["category"] {
+  const combined = (name + " " + raw).toLowerCase();
+
+  // Cement (מלט וצמנט)
+  if (/מלט|צמנט|פורטלנד/i.test(combined)) {
+    return "cement";
+  }
+
+  // Big Bags (שקים גדולים / בלות)
+  if (
+    /בלה|בלות|שק גדול|שקי ענק/i.test(combined) ||
+    (/סומסום|שומשום|חול/i.test(combined) && !/שק חול 25|שק סומסום 25/i.test(combined)) ||
+    /טיט בלה|טיט שק גדול/i.test(combined)
+  ) {
+    return "big_bag";
+  }
+
+  // Blocks & Boards (בלוקים ולוחות)
+  if (/בלוק|איטונג|בטון \d+|לוח עץ|איסכורית|גבס|ניצב|מסלול|רשת/i.test(combined)) {
+    return "block";
+  }
+
+  // Dry-mix bags & Adhesives (תערובות יבשות, טיח, דבק, ריצופית)
+  if (/טיח|דבק|טיט|ריצופית|פלסטומר|שליכט|אלסטוסיל|פוליגג|סיקה|קלסימו/i.test(combined)) {
+    return "dry_mix";
+  }
+
+  return "other";
+}
+
+function extractUnit(text: string, category: ParsedProductItem["category"]): string {
+  if (/בלה|בלות|שק גדול|שקי ענק/i.test(text)) return "בלה";
+  if (/שק|שקים/i.test(text)) return "שק";
+  if (/משטח|משטחים/i.test(text)) return "משטח";
+  if (/לוח|לוחות/i.test(text)) return "לוח";
+  if (/יח'|יחידות|יח/i.test(text)) return "יח'";
+  if (/פח|פחים/i.test(text)) return "פח";
+  if (/דלי/i.test(text)) return "דלי";
+
+  if (category === "cement") return "שק";
+  if (category === "big_bag") return "בלה";
+  if (category === "block") return "יח'";
+  if (category === "dry_mix") return "שק";
+  return "יח'";
+}
+
+/**
+ * Aggregates today's dispensed inventory from Column H ("פירוט מוצרים וכמויות")
+ * across all active and delivered orders today.
+ */
+export function aggregateTodayDispensedInventory(orders: Order[]): InventoryAggregationSummary {
+  // Filter today's relevant orders (בהכנה, מוכן להעמסה, בהעמסה, יצא לדרך, סופק, ממתין)
+  const relevantOrders = orders.filter((o) =>
+    ["בסידור עבודה", "בהכנה", "מוכן להעמסה", "בהעמסה", "יצא לדרך", "סופק", "ממתין"].includes(
+      o.status,
+    ),
+  );
+
+  let totalCementBags = 0;
+  let totalBigBags = 0;
+  const bigBagsBreakdown = {
+    sesame: 0,
+    sand: 0,
+    tit: 0,
+    other: 0,
+  };
+
+  let totalBlocks = 0;
+  const blocksBreakdown: Record<string, number> = {};
+
+  let totalDryMixBags = 0;
+  const dryMixBreakdown: Record<string, number> = {};
+
+  for (const order of relevantOrders) {
+    let itemsToProcess: ParsedProductItem[] = [];
+
+    if (order.itemsFormatted && order.itemsFormatted.trim()) {
+      itemsToProcess = parseColumnHProductText(order.itemsFormatted);
+    } else if (order.items && order.items.length > 0) {
+      itemsToProcess = order.items.map((it) => {
+        const cat = categorizeProduct(it.name, it.name);
+        return {
+          raw: it.name,
+          name: it.name,
+          quantity: it.quantity,
+          unit: it.unit || extractUnit(it.name, cat),
+          category: cat,
+          sku: it.sku,
+        };
+      });
+    }
+
+    for (const item of itemsToProcess) {
+      if (item.category === "cement") {
+        totalCementBags += item.quantity;
+      } else if (item.category === "big_bag") {
+        totalBigBags += item.quantity;
+        const lowerName = item.name.toLowerCase();
+        if (/סומסום|שומשום/i.test(lowerName)) {
+          bigBagsBreakdown.sesame += item.quantity;
+        } else if (/חול/i.test(lowerName)) {
+          bigBagsBreakdown.sand += item.quantity;
+        } else if (/טיט/i.test(lowerName)) {
+          bigBagsBreakdown.tit += item.quantity;
+        } else {
+          bigBagsBreakdown.other += item.quantity;
+        }
+      } else if (item.category === "block") {
+        totalBlocks += item.quantity;
+        const cleanName = item.name.replace(/\d+$/, "").trim() || item.name;
+        blocksBreakdown[cleanName] = (blocksBreakdown[cleanName] || 0) + item.quantity;
+      } else if (item.category === "dry_mix") {
+        totalDryMixBags += item.quantity;
+        const cleanName = item.name.trim();
+        dryMixBreakdown[cleanName] = (dryMixBreakdown[cleanName] || 0) + item.quantity;
+      }
+    }
+  }
+
+  // Calculate pallets equivalents
+  // Cement: 40 bags per pallet standard
+  const cementPallets = Math.round((totalCementBags / 40) * 10) / 10;
+  // Blocks: ~75 blocks per standard pallet
+  const blockPallets = Math.round((totalBlocks / 75) * 10) / 10;
+
+  // Threshold alerts:
+  // Cement >= 80 bags -> HIGH_DEMAND
+  // Big bags >= 6 -> QUARRY_REORDER
+  const isCementHighDemand = totalCementBags >= 80;
+  const recommendedCementPallets = Math.max(1, Math.ceil(totalCementBags / 40));
+  const cementReorderRecommendation = isCementHighDemand
+    ? `מומלץ להזמין מנתנאל: ${recommendedCementPallets} משטחים (${recommendedCementPallets * 40} שק)`
+    : "קצב משיכת מלט מאוזן — מלאי רצפה תקין";
+
+  const isBigBagsQuarryAlert = totalBigBags >= 6;
+  const bigBagsReorderRecommendation = isBigBagsQuarryAlert
+    ? "לתאם פול-טריילר מהמחצבה 🚜"
+    : "קצב משיכת בלות שגרתי";
+
+  return {
+    totalCementBags,
+    cementPallets,
+    isCementHighDemand,
+    cementReorderRecommendation,
+    totalBigBags,
+    bigBagsBreakdown,
+    isBigBagsQuarryAlert,
+    bigBagsReorderRecommendation,
+    totalBlocks,
+    blockPallets,
+    blocksBreakdown,
+    totalDryMixBags,
+    dryMixBreakdown,
+    ordersCount: relevantOrders.length,
+    lastCalculatedAt: new Date().toLocaleTimeString("he-IL", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  };
+}
 
 export function computeProductAnalytics(orders: Order[]): ProductAnalyticsSummary {
   let bellaBagsTotal = 0;

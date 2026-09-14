@@ -52,13 +52,16 @@ export interface UrgentItem {
   etaTime?: string;
 }
 
+const SSR_BASELINE_DATE = new Date("2026-09-14T11:00:00.000Z");
+
 function useTickerClock() {
-  const [now, setNow] = useState<Date>(() => new Date());
+  const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
+    setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-  return now;
+  return now ?? SSR_BASELINE_DATE;
 }
 
 /**
@@ -504,7 +507,9 @@ export function UrgentDeliveriesTicker() {
                           )}
                         >
                           <Clock className="size-4" />
-                          <span>{filteredItems[carouselIndex].countdownDisplay}</span>
+                          <span suppressHydrationWarning>
+                            {filteredItems[carouselIndex].countdownDisplay}
+                          </span>
                         </div>
 
                         {/* Customer & Location */}
@@ -669,7 +674,7 @@ function TickerCard({ item, onClick }: { item: UrgentItem; onClick: () => void }
         ) : (
           <Clock className="size-3" />
         )}
-        <span>{item.countdownDisplay}</span>
+        <span suppressHydrationWarning>{item.countdownDisplay}</span>
       </div>
 
       {/* Identification & Destination */}
@@ -947,7 +952,10 @@ function AllUrgentModal({
                     )}
                   >
                     <span className="text-[10px] font-bold uppercase">{item.urgencyLabel}</span>
-                    <span className="text-sm font-black tabular-nums leading-tight">
+                    <span
+                      suppressHydrationWarning
+                      className="text-sm font-black tabular-nums leading-tight"
+                    >
                       {item.countdownDisplay}
                     </span>
                   </div>
