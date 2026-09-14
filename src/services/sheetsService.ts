@@ -291,6 +291,13 @@ export function parseOrdersCsv(csv: string): Order[] {
     }
 
     const order = map.get(orderId)!;
+
+    // פורמט שורה-אחת-להזמנה: כל המוצרים בתא טקסט אחד
+    const productsCell = (c.products >= 0 ? cells[c.products] : "")?.trim();
+    if (productsCell && order.items.length === 0) {
+      order.items = parseProductList(productsCell, orderId);
+    }
+
     const sku = (c.sku >= 0 ? cells[c.sku] : "")?.trim();
     if (sku) {
       const approvedRaw = (c.approved >= 0 ? cells[c.approved] : "")?.trim().toLowerCase();
