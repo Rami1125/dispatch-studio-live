@@ -119,7 +119,7 @@ export function findBestHebrewFemaleVoice(): SpeechSynthesisVoice | null {
     return null;
   }
 
-// 2. Score Hebrew voices to favor high quality female narrators
+  // 2. Score Hebrew voices to favor high quality female narrators
   const scored = hebrewVoices.map((voice) => {
     const nameLower = voice.name.toLowerCase();
     let score = 10;
