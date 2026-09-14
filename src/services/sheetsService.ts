@@ -7,6 +7,10 @@ export const DRIVERS: Driver[] = [
   { id: "d4", name: "יוסי", vehicle: "טנדר הפצה" },
 ];
 
+/** גיליון העבודה של ח. סבן — טאב "דשבורד_הזמנות" */
+export const DEFAULT_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/1VA9J6n9IYcooO_s2xOpnkvyDQWWQD3pfhh0cnenCkoA/edit";
+
 export const WAREHOUSES: Warehouse[] = [
   { id: "w4", name: "מחסן 4", loadRatio: 0.72 },
   { id: "w30", name: "מחסן 30", loadRatio: 0.41 },
