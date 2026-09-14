@@ -1,0 +1,114 @@
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { Cloud, CloudOff, RefreshCw, Settings2, Truck } from "lucide-react";
+import { useDispatchBoard } from "@/context/DispatchContext";
+import { cn } from "@/lib/utils";
+
+function useClock() {
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function Metric({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="flex min-w-[5.5rem] flex-col items-center rounded-xl bg-card/70 px-4 py-2 ring-1 ring-border/70">
+      <span className={cn("text-3xl font-black leading-none tabular-nums", tone)}>{value}</span>
+      <span className="mt-1 text-xs font-medium text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+export function TVHeader() {
+  const { counts, published, syncStatus, lastSyncAt, sourceMode, openStudio } = useDispatchBoard();
+  const now = useClock();
+
+  const time = now
+    ? now.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : "--:--:--";
+  const date = now
+    ? now.toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" })
+    : "";
+
+  return (
+    <header className="flex items-center justify-between gap-6 rounded-2xl border border-border/80 bg-card/80 px-6 py-4 shadow-md backdrop-blur-md">
+      <div className="flex items-center gap-4">
+        <button
+          onClick={openStudio}
+          aria-label="פתיחת סטודיו ניהול"
+          className="grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm transition hover:bg-primary/90"
+        >
+          <Truck className="size-8" />
+        </button>
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-foreground">ח. סבן</h1>
+          <p className="text-sm font-semibold text-muted-foreground">
+            לוח סידור והפצה חי · Noa AI Live Dispatch
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Metric label="ממתין" value={counts["ממתין"]} tone="text-slate-600" />
+        <Metric label="בהעמסה" value={counts["בהעמסה"]} tone="text-accent" />
+        <Metric label="בדרך" value={counts["יצא לדרך"]} tone="text-primary" />
+        <Metric label="סופק" value={counts["סופק"]} tone="text-emerald-600" />
+        <Metric label="סה״כ" value={published.length} tone="text-foreground" />
+      </div>
+
+      <div className="flex items-center gap-5">
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ring-1 ring-inset",
+            syncStatus === "error"
+              ? "bg-destructive/10 text-destructive ring-destructive/30"
+              : syncStatus === "syncing"
+                ? "bg-accent/15 text-accent ring-accent/30"
+                : "bg-emerald-500/10 text-emerald-700 ring-emerald-500/25",
+          )}
+        >
+          {syncStatus === "error" ? (
+            <CloudOff className="size-4" />
+          ) : syncStatus === "syncing" ? (
+            <RefreshCw className="size-4 animate-spin" />
+          ) : (
+            <Cloud className="size-4" />
+          )}
+          <span>{sourceMode === "sheets" ? "סנכרון גיליון" : "נתוני הדגמה"}</span>
+          {lastSyncAt && (
+            <span className="tabular-nums opacity-70">
+              {new Date(lastSyncAt).toLocaleTimeString("he-IL", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          )}
+        </div>
+
+        <motion.div
+          key={time}
+          initial={{ opacity: 0.6 }}
+          animate={{ opacity: 1 }}
+          className="text-left"
+        >
+          <div className="text-4xl font-black tabular-nums leading-none text-foreground">
+            {time}
+          </div>
+          <div className="mt-1 text-xs font-medium text-muted-foreground">{date}</div>
+        </motion.div>
+
+        <button
+          onClick={openStudio}
+          aria-label="סטודיו"
+          className="grid size-10 place-items-center rounded-xl text-muted-foreground/50 transition hover:bg-secondary hover:text-foreground"
+        >
+          <Settings2 className="size-5" />
+        </button>
+      </div>
+    </header>
+  );
+}
