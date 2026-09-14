@@ -1,0 +1,80 @@
+export type OrderStatus = "ממתין" | "בהעמסה" | "יצא לדרך" | "סופק";
+
+export interface OrderItem {
+  sku: string;
+  name: string;
+  quantity: number;
+  unit?: string;
+  isApproved: boolean;
+}
+
+export interface LogisticsMetrics {
+  /** שקי בלה - מק"ט 60002 */
+  bellaBags: number;
+  /** משטחי סבן - מק"ט 60060 */
+  sabanPallets: number;
+  /** משקל משוער בק"ג */
+  estimatedWeightKg: number;
+}
+
+export interface Driver {
+  id: string;
+  name: string;
+  vehicle: string;
+  phone?: string;
+}
+
+export interface Warehouse {
+  id: string;
+  name: string;
+  loadRatio: number; // 0..1 עומס נוכחי
+}
+
+export interface Order {
+  orderId: string;
+  customerName: string;
+  address: string;
+  city: string;
+  warehouse: string;
+  driver: string;
+  targetTime: string; // "11:00"
+  round: number;
+  status: OrderStatus;
+  logisticsMetrics: LogisticsMetrics;
+  items: OrderItem[];
+  note?: string;
+  updatedAt?: string;
+}
+
+export type AlertLevel = "info" | "warning" | "critical" | "success";
+
+export interface NoaAlert {
+  id: string;
+  level: AlertLevel;
+  message: string;
+  createdAt: string;
+  /** התראה מתפרצת - תוצג כמודל קופץ על הטלוויזיה */
+  isFlash?: boolean;
+  /** משך תצוגה לפלאש במילישניות */
+  durationMs?: number;
+}
+
+export type DataSourceMode = "mock" | "sheets";
+
+export interface DispatchState {
+  /** מה משודר כרגע לטלוויזיה */
+  published: Order[];
+  /** טיוטת עריכה בסטודיו */
+  draft: Order[];
+  alerts: NoaAlert[];
+  flash: NoaAlert | null;
+  drivers: Driver[];
+  warehouses: Warehouse[];
+  sourceMode: DataSourceMode;
+  sheetUrl: string;
+  pollingSeconds: number;
+  lastSyncAt: string | null;
+  syncStatus: "idle" | "syncing" | "ok" | "error";
+  syncError: string | null;
+  isDirty: boolean;
+}
