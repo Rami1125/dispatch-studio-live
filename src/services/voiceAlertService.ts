@@ -119,17 +119,36 @@ export function findBestHebrewFemaleVoice(): SpeechSynthesisVoice | null {
     return null;
   }
 
-  // 2. Score Hebrew voices to favor high quality female narrators
+// 2. Score Hebrew voices to favor high quality female narrators
   const scored = hebrewVoices.map((voice) => {
     const nameLower = voice.name.toLowerCase();
     let score = 10;
 
-    // Female names / cues
+    // ❌ הפחתת ניקוד לקולות גבריים (כדי שלא ייבחרו בטעות):
     if (
-      nameLower.includes("carmit") ||
-      nameLower.includes("כרמית") ||
-      nameLower.includes("hila") ||
-      nameLower.includes("הילה") ||
+      nameLower.includes("asaf") ||
+      nameLower.includes("אסף") ||
+      nameLower.includes("avri") ||
+      nameLower.includes("אברי") ||
+      nameLower.includes("david") ||
+      nameLower.includes("דוד") ||
+      nameLower.includes("male") ||
+      nameLower.includes("זכר")
+    ) {
+      score -= 100;
+    }
+
+    // ⭐ עדיפות עליונה לקולות נשיים טבעיים מובילים:
+    // Hila (הקול הנשי של מיקרוסופט/Edge) ו-Carmit (הקול הנשי של אפל/סירי)
+    if (nameLower.includes("hila") || nameLower.includes("הילה")) {
+      score += 80;
+    }
+    if (nameLower.includes("carmit") || nameLower.includes("כרמית")) {
+      score += 70;
+    }
+
+    // רמזים נשיים נוספים:
+    if (
       nameLower.includes("sara") ||
       nameLower.includes("שרה") ||
       nameLower.includes("noa") ||
@@ -139,19 +158,21 @@ export function findBestHebrewFemaleVoice(): SpeechSynthesisVoice | null {
       nameLower.includes("eden") ||
       nameLower.includes("עדן") ||
       nameLower.includes("female") ||
-      nameLower.includes("woman") ||
       nameLower.includes("נקבה")
     ) {
       score += 50;
     }
 
-    // High fidelity engines (Microsoft Online / Google / Natural)
-    if (nameLower.includes("online") || nameLower.includes("natural")) {
+    // קולות Natural / Online (באיכות גבוהה של מיקרוסופט)
+    if (nameLower.includes("natural") || nameLower.includes("online")) {
       score += 30;
     }
+
+    // קול Google בעברית (ב-Chrome)
     if (nameLower.includes("google")) {
       score += 20;
     }
+
     if (voice.lang === "he-IL" || voice.lang === "iw-IL") {
       score += 15;
     }
