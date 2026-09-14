@@ -315,7 +315,7 @@ export function parseOrdersCsv(csv: string): Order[] {
       candidate.some(
         (h) =>
           h.includes("הזמנה") ||
-          h.includes("לקוח") ||
+          h.includes("��קוח") ||
           h.includes("מוצרים") ||
           h.includes("סבב ושעה"),
       )
@@ -453,9 +453,9 @@ export function toCsvUrl(url: string, sheetName = "דשבורד_הזמנות"): 
   )}`;
 }
 
-export async function fetchOrdersFromSheet(url: string): Promise<Order[]> {
+export async function fetchOrdersFromSheet(url: string, signal?: AbortSignal): Promise<Order[]> {
   const target = url.includes("output=csv") || url.includes("out:csv") ? url : toCsvUrl(url);
-  const res = await fetch(target, { cache: "no-store" });
+  const res = await fetch(target, { cache: "no-store", signal });
   if (!res.ok) throw new Error(`שגיאת גיליון: ${res.status}`);
   const csv = await res.text();
   const orders = parseOrdersCsv(csv);
