@@ -82,8 +82,8 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const [flash, setFlash] = useState<NoaAlert | null>(null);
   const [isStudioOpen, setStudioOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [sourceMode, setSourceModeState] = useState<DataSourceMode>("mock");
-  const [sheetUrl, setSheetUrlState] = useState("");
+  const [sourceMode, setSourceModeState] = useState<DataSourceMode>("sheets");
+  const [sheetUrl, setSheetUrlState] = useState(DEFAULT_SHEET_URL);
   const [pollingSeconds, setPollingSecondsState] = useState(45);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<DispatchState["syncStatus"]>("idle");
