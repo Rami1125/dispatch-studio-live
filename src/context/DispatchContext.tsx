@@ -40,6 +40,16 @@ import {
   playAlarmSound,
   playStatusChime,
 } from "@/utils/soundEffects";
+import {
+  announceUrgentOrderStatusChange,
+  isHighPriorityUrgentOrder,
+  speakHebrew,
+  isVoiceAnnounceEnabled,
+  toggleVoiceAnnounce,
+  setVoiceAnnounceEnabled,
+  subscribeVoiceStatus,
+  testVoiceAnnouncement,
+} from "@/services/voiceAlertService";
 
 const DEFAULT_SCREENSAVER_SETTINGS: ScreensaverSettings = {
   isEnabled: true,
@@ -247,6 +257,14 @@ interface DispatchContextValue extends DispatchState {
   startPicking: (orderId: string, pickerName?: string) => void;
   finishPicking: (orderId: string) => void;
   reportPickerOverrun: (orderId: string) => void;
+
+  /* voice synthesis alerts */
+  isVoiceAnnounceEnabled: boolean;
+  toggleVoiceAnnounce: () => boolean;
+  setVoiceAnnounceEnabled: (enabled: boolean) => void;
+  isVoiceSpeaking: boolean;
+  triggerVoiceTest: () => Promise<void>;
+  speakUrgentAlert: (text: string) => Promise<void>;
 }
 
 const DispatchContext = createContext<DispatchContextValue | null>(null);
@@ -288,6 +306,19 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<DispatchState["syncStatus"]>("idle");
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+
+  /* ---------------- Browser Speech Synthesis Voice Alerts ---------------- */
+  const [voiceAnnounceEnabled, setVoiceAnnounceEnabledState] = useState(() =>
+    isVoiceAnnounceEnabled(),
+  );
+  const [voiceSpeaking, setVoiceSpeaking] = useState(false);
+
+  useEffect(() => {
+    return subscribeVoiceStatus((enabled, speaking) => {
+      setVoiceAnnounceEnabledState(enabled);
+      setVoiceSpeaking(speaking);
+    });
+  }, []);
 
   /* ---------------- Real-time Clock & Live Change Tracking ---------------- */
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date("2026-09-14T11:00:00.000Z"));
@@ -622,10 +653,18 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         playStatusChime();
       }
 
-      // 3. Dispatch async background request to Google Apps Script Webhook (non-blocking)
+      // 3. Autonomous Browser Speech Synthesis for urgent/high-priority order status change
+      const targetOrder =
+        published.find((o) => o.orderId === orderId) || draft.find((o) => o.orderId === orderId);
+      const previousStatus = targetOrder?.status;
+      if (targetOrder && previousStatus !== newStatus) {
+        announceUrgentOrderStatusChange(targetOrder, newStatus, previousStatus);
+      }
+
+      // 4. Dispatch async background request to Google Apps Script Webhook (non-blocking)
       dispatchWebhookUpdate(orderId, newStatus);
     },
-    [dispatchWebhookUpdate, published, pushAlert, recordOrderChange],
+    [dispatchWebhookUpdate, draft, published, pushAlert, recordOrderChange],
   );
 
   const setOrderStatus = useCallback(
@@ -893,6 +932,13 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
           // Trigger NoaFlashOverlay for new order alert and play audio chime
           pushAlert(msg, "warning", true);
           playNewOrderSound();
+
+          // If brand new order is urgent/high priority, announce it in Hebrew
+          if (isHighPriorityUrgentOrder(order)) {
+            speakHebrew(
+              `התקבלה הזמנה דחופה חדשה! מספר ${order.orderId}, עבור ${order.customerName}, סבב ${order.round}.`,
+            );
+          }
           return;
         }
 
@@ -901,6 +947,9 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
           recordOrderChange(order.orderId);
           const isUrgent = order.status === "בהעמסה" || order.status === "מוכן להעמסה";
           const msg = `סטטוס עודכן — הזמנה ${order.orderId} ${order.customerName}: ${order.status}`;
+
+          // Trigger autonomous Hebrew voice narration for high priority / urgent order status changes
+          announceUrgentOrderStatusChange(order, order.status, before.status);
 
           if (isUrgent) {
             setLatestOrderEvent({
@@ -1470,6 +1519,13 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     targetedBriefings,
     generateAIBriefing,
     isGeneratingAI,
+    /* voice synthesis alerts */
+    isVoiceAnnounceEnabled: voiceAnnounceEnabled,
+    toggleVoiceAnnounce,
+    setVoiceAnnounceEnabled,
+    isVoiceSpeaking: voiceSpeaking,
+    triggerVoiceTest: testVoiceAnnouncement,
+    speakUrgentAlert: speakHebrew,
   };
 
   return <DispatchContext.Provider value={value}>{children}</DispatchContext.Provider>;

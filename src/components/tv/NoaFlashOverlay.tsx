@@ -1,10 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Siren } from "lucide-react";
+import { Siren, Volume2 } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import { cn } from "@/lib/utils";
 
 export function NoaFlashOverlay() {
-  const { flash, dismissFlash } = useDispatchBoard();
+  const { flash, dismissFlash, isVoiceSpeaking } = useDispatchBoard();
 
   return (
     <AnimatePresence>
@@ -45,7 +45,15 @@ export function NoaFlashOverlay() {
               <Siren className="size-14" />
             </motion.span>
             <div>
-              <div className="text-xl font-black text-muted-foreground">התראת נועה AI</div>
+              <div className="flex items-center gap-3">
+                <div className="text-xl font-black text-muted-foreground">התראת נועה AI</div>
+                {isVoiceSpeaking && (
+                  <span className="flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-xs font-black text-purple-300 ring-1 ring-purple-400/50 animate-pulse">
+                    <Volume2 className="size-3.5 animate-bounce text-purple-400" />
+                    <span>קריינות קולית חיה בעברית...</span>
+                  </span>
+                )}
+              </div>
               <p className="mt-2 text-5xl font-black leading-tight text-foreground">
                 {flash.message}
               </p>

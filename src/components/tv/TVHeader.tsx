@@ -3,7 +3,9 @@ import { motion } from "framer-motion";
 import {
   Cloud,
   CloudOff,
+  Mic,
   Monitor,
+  Radio,
   RefreshCw,
   Settings2,
   Smartphone,
@@ -44,6 +46,10 @@ export function TVHeader({ onSwitchToPicker }: { onSwitchToPicker?: () => void }
     openStudio,
     setScreensaverActive,
     nearestOrderMinutesRemaining,
+    isVoiceAnnounceEnabled,
+    toggleVoiceAnnounce,
+    isVoiceSpeaking,
+    triggerVoiceTest,
   } = useDispatchBoard();
   const now = useClock();
   const [isMuted, setIsMuted] = useState(isAudioMuted());
@@ -100,6 +106,44 @@ export function TVHeader({ onSwitchToPicker }: { onSwitchToPicker?: () => void }
             <span>מסוף ליקוט PWA</span>
           </button>
         )}
+
+        {/* Voice Speech Synthesis (Noa AI Hebrew Female Voice) */}
+        <div className="flex items-center gap-1.5 rounded-xl border border-border/80 bg-background/60 p-1">
+          <button
+            onClick={() => toggleVoiceAnnounce()}
+            className={cn(
+              "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-black transition",
+              isVoiceSpeaking
+                ? "bg-fuchsia-500/25 text-fuchsia-300 ring-1 ring-fuchsia-400 animate-pulse"
+                : isVoiceAnnounceEnabled
+                  ? "bg-purple-500/20 text-purple-200 hover:bg-purple-500/30"
+                  : "bg-muted/40 text-muted-foreground hover:bg-muted/60",
+            )}
+            title={
+              isVoiceAnnounceEnabled
+                ? "קריינות קולית עברית חיה (נועה AI) פעילה להזמנות דחופות (לחץ להשבתה)"
+                : "קריינות קולית מושתקת (לחץ להפעלה)"
+            }
+          >
+            <Mic className={cn("size-3.5", isVoiceSpeaking && "animate-bounce text-fuchsia-400")} />
+            <span className="hidden lg:inline">
+              {isVoiceSpeaking
+                ? "נועה מדווחת..."
+                : isVoiceAnnounceEnabled
+                  ? "קריינות חיה"
+                  : "קריינות כבויה"}
+            </span>
+          </button>
+          {isVoiceAnnounceEnabled && (
+            <button
+              onClick={() => triggerVoiceTest()}
+              className="rounded-lg px-2 py-1 text-[11px] font-bold text-purple-300 transition hover:bg-purple-500/25 hover:text-white"
+              title="השמעת בדיקה של הקריינית בעברית"
+            >
+              בדיקה
+            </button>
+          )}
+        </div>
 
         {/* Audio Mute/Unmute toggle */}
         <button
