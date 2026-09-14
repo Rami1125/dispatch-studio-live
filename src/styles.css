@@ -150,3 +150,23 @@
     color: var(--color-foreground);
   }
 }
+
+@layer base {
+  html,
+  body {
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
