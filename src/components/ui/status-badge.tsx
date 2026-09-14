@@ -2,10 +2,10 @@ import { cn } from "@/lib/utils";
 import type { OrderStatus } from "@/types/dispatch";
 
 const STATUS_CLASS: Record<OrderStatus, string> = {
-  "ממתין": "bg-slate-200/80 text-slate-700 ring-slate-300",
-  "בהעמסה": "bg-accent/15 text-accent-foreground ring-accent/40",
+  ממתין: "bg-slate-200/80 text-slate-700 ring-slate-300",
+  בהעמסה: "bg-accent/15 text-accent-foreground ring-accent/40",
   "יצא לדרך": "bg-primary/10 text-primary ring-primary/30",
-  "סופק": "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
+  סופק: "bg-emerald-500/15 text-emerald-700 ring-emerald-500/30",
 };
 
 export function StatusBadge({

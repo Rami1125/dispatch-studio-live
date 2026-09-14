@@ -4,7 +4,6 @@ Plaintext
 
 צור אפליקציית React + TypeScript ייעודית שלמה מ-0 עבור "ח. סבן - לוח סידור והפצה חי (Noa AI Live Dispatch & Studio)" המיועדת להקרנה בטלוויזיות דרך Monitors AnyWhere ולניהול שוטף במשרד.
 
-
 שפת עיצוב וויזואליה (Enterprise Slate / Balanced High-End Theme):
 
 פלטת צבעים מאוזנת (Enterprise Slate):

@@ -68,7 +68,10 @@ function LiveBoard() {
   }, [published]);
 
   return (
-    <div dir="rtl" className="flex h-screen w-screen flex-col gap-3 overflow-hidden bg-background p-4">
+    <div
+      dir="rtl"
+      className="flex h-screen w-screen flex-col gap-3 overflow-hidden bg-background p-4"
+    >
       <TVHeader />
       <NoaAIBanner />
 

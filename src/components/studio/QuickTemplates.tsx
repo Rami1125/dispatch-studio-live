@@ -6,9 +6,17 @@ import { cn } from "@/lib/utils";
 
 const TEMPLATES: { label: string; message: string; level: AlertLevel }[] = [
   { label: "עיכוב במחסן", message: "עיכוב בהעמסה במחסן — נהגים להמתין להנחיה", level: "warning" },
-  { label: "הזמנה דחופה", message: "הזמנה דחופה נכנסה ללוח — לתעדף העמסה מיידית", level: "critical" },
+  {
+    label: "הזמנה דחופה",
+    message: "הזמנה דחופה נכנסה ללוח — לתעדף העמסה מיידית",
+    level: "critical",
+  },
   { label: "סבב יוצא", message: "סבב יוצא לדרך — נהגים לגשת לשער היציאה", level: "info" },
-  { label: "הפסקת צהריים", message: "הפסקת צהריים 13:00-13:30 — חידוש העמסות ב-13:30", level: "info" },
+  {
+    label: "הפסקת צהריים",
+    message: "הפסקת צהריים 13:00-13:30 — חידוש העמסות ב-13:30",
+    level: "info",
+  },
   { label: "בטיחות", message: "תזכורת בטיחות: קסדה ואפוד בכל שטח המחסן", level: "warning" },
   { label: "סיום יום", message: "כל ההזמנות סופקו — כל הכבוד לצוות ההפצה!", level: "success" },
 ];

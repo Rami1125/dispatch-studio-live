@@ -18,9 +18,7 @@ export function OrderCard({ order, index = 0 }: { order: Order; index?: number }
       transition={{ duration: 0.35, delay: Math.min(index * 0.04, 0.4) }}
       className={cn(
         "flex flex-col gap-3 rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur-md transition",
-        order.status === "בהעמסה"
-          ? "border-accent/60 ring-2 ring-accent/30"
-          : "border-border/80",
+        order.status === "בהעמסה" ? "border-accent/60 ring-2 ring-accent/30" : "border-border/80",
         order.status === "סופק" && "opacity-70",
       )}
     >

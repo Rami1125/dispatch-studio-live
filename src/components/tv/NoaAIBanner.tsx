@@ -61,10 +61,7 @@ export function NoaAIBanner() {
     return list;
   }, [published, warehouses]);
 
-  const feed = useMemo(
-    () => [...alerts.filter((a) => !a.isFlash), ...derived],
-    [alerts, derived],
-  );
+  const feed = useMemo(() => [...alerts.filter((a) => !a.isFlash), ...derived], [alerts, derived]);
 
   useEffect(() => {
     const id = setInterval(() => setIndex((i) => i + 1), 10000);

@@ -86,10 +86,7 @@ export const MOCK_ORDERS: Order[] = [
     round: 1,
     status: "סופק",
     logisticsMetrics: { bellaBags: 4, sabanPallets: 2, estimatedWeightKg: 1800 },
-    items: [
-      item("10002", "מלט אפור 25 ק״ג", 40, true),
-      item("11511", "סומסום שק גדול", 12, true),
-    ],
+    items: [item("10002", "מלט אפור 25 ק״ג", 40, true), item("11511", "סומסום שק גדול", 12, true)],
   },
   {
     orderId: "6215444",

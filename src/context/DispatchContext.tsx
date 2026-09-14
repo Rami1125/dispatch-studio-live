@@ -16,12 +16,7 @@ import type {
   Order,
   OrderStatus,
 } from "@/types/dispatch";
-import {
-  DRIVERS,
-  WAREHOUSES,
-  fetchOrdersFromSheet,
-  getMockOrders,
-} from "@/services/sheetsService";
+import { DRIVERS, WAREHOUSES, fetchOrdersFromSheet, getMockOrders } from "@/services/sheetsService";
 
 interface DispatchContextValue extends DispatchState {
   /* studio */
@@ -92,25 +87,22 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ---------------- alerts ---------------- */
-  const pushAlert = useCallback(
-    (message: string, level: AlertLevel = "info", isFlash = false) => {
-      const alert: NoaAlert = {
-        id: uid(),
-        level,
-        message,
-        createdAt: new Date().toISOString(),
-        isFlash,
-        durationMs: 9000,
-      };
-      setAlerts((prev) => [alert, ...prev].slice(0, 12));
-      if (isFlash) {
-        setFlash(alert);
-        if (flashTimer.current) clearTimeout(flashTimer.current);
-        flashTimer.current = setTimeout(() => setFlash(null), alert.durationMs);
-      }
-    },
-    [],
-  );
+  const pushAlert = useCallback((message: string, level: AlertLevel = "info", isFlash = false) => {
+    const alert: NoaAlert = {
+      id: uid(),
+      level,
+      message,
+      createdAt: new Date().toISOString(),
+      isFlash,
+      durationMs: 9000,
+    };
+    setAlerts((prev) => [alert, ...prev].slice(0, 12));
+    if (isFlash) {
+      setFlash(alert);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => setFlash(null), alert.durationMs);
+    }
+  }, []);
 
   const dismissFlash = useCallback(() => {
     if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -211,7 +203,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     setSyncStatus("syncing");
     setSyncError(null);
     try {
-      const orders = sourceMode === "sheets" && sheetUrl ? await fetchOrdersFromSheet(sheetUrl) : getMockOrders();
+      const orders =
+        sourceMode === "sheets" && sheetUrl
+          ? await fetchOrdersFromSheet(sheetUrl)
+          : getMockOrders();
       setPublished(orders);
       setDraft(clone(orders));
       setIsDirty(false);
@@ -290,10 +285,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
   const counts = useMemo(() => {
     const base: Record<OrderStatus, number> = {
-      "ממתין": 0,
-      "בהעמסה": 0,
+      ממתין: 0,
+      בהעמסה: 0,
       "יצא לדרך": 0,
-      "סופק": 0,
+      סופק: 0,
     };
     published.forEach((o) => {
       base[o.status] += 1;
