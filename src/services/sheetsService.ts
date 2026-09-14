@@ -7,6 +7,10 @@ export const DRIVERS: Driver[] = [
   { id: "d4", name: "יוסי", vehicle: "טנדר הפצה" },
 ];
 
+/** גיליון העבודה של ח. סבן — טאב "דשבורד_הזמנות" */
+export const DEFAULT_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/1VA9J6n9IYcooO_s2xOpnkvyDQWWQD3pfhh0cnenCkoA/edit";
+
 export const WAREHOUSES: Warehouse[] = [
   { id: "w4", name: "מחסן 4", loadRatio: 0.72 },
   { id: "w30", name: "מחסן 30", loadRatio: 0.41 },
@@ -159,6 +163,33 @@ export function parseCsvLine(line: string): string[] {
   return out;
 }
 
+/** מפצל CSV לשורות תוך כיבוד מרכאות (תאים עם ירידות שורה). */
+export function splitCsvRecords(csv: string): string[] {
+  const records: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < csv.length; i++) {
+    const ch = csv[i];
+    if (ch === '"') {
+      if (inQuotes && csv[i + 1] === '"') {
+        cur += '""';
+        i++;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      cur += ch;
+    } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      if (ch === "\r" && csv[i + 1] === "\n") i++;
+      if (cur.trim().length > 0) records.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim().length > 0) records.push(cur);
+  return records;
+}
+
 function toNumber(value: string | undefined): number {
   if (!value) return 0;
   const n = Number(String(value).replace(/[^\d.-]/g, ""));
@@ -167,7 +198,54 @@ function toNumber(value: string | undefined): number {
 
 function toStatus(value: string | undefined): OrderStatus {
   const v = (value ?? "").trim();
-  return STATUSES.includes(v as OrderStatus) ? (v as OrderStatus) : "ממתין";
+  if (STATUSES.includes(v as OrderStatus)) return v as OrderStatus;
+  if (/סופק|נמסר|הושלם|בוצע/.test(v)) return "סופק";
+  if (/יצא|בדרך|בהפצה|נשלח/.test(v)) return "יצא לדרך";
+  if (/העמסה|נטען|מועמס/.test(v)) return "בהעמסה";
+  return "ממתין";
+}
+
+const HEBREW_NUMBERS: Record<string, number> = {
+  אחד: 1,
+  שני: 2,
+  שתי: 2,
+  שלוש: 3,
+  ארבע: 4,
+  חמש: 5,
+};
+
+/**
+ * ממיר תא "פירוט מוצרים וכמויות" (טקסט חופשי) לרשימת פריטים.
+ * דוגמה: "2 בלות סומסום, 3 בלות חול, 6 שק מלט אפור"
+ */
+export function parseProductList(text: string, orderId = ""): OrderItem[] {
+  if (!text || !text.trim()) return [];
+  return text
+    .split(/[,;\n]|\s\+\s/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map((part, index) => {
+      const leading = part.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+      let quantity = leading ? Number(leading[1]) : 0;
+      let name = leading ? (leading[2] ?? "").trim() : part;
+      if (!leading) {
+        const inner = part.match(/(\d+(?:\.\d+)?)/);
+        if (inner) quantity = Number(inner[1]);
+      }
+      if (!quantity) {
+        const word = Object.keys(HEBREW_NUMBERS).find((w) => part.startsWith(w));
+        if (word) {
+          quantity = HEBREW_NUMBERS[word] ?? 0;
+          name = part.slice(word.length).trim();
+        }
+      }
+      return {
+        sku: `${orderId || "P"}-${index + 1}`,
+        name: name || part,
+        quantity: quantity || 1,
+        isApproved: false,
+      } satisfies OrderItem;
+    });
 }
 
 /**
@@ -178,13 +256,18 @@ function toStatus(value: string | undefined): OrderStatus {
  * Multiple rows sharing the same order id are merged into one order with items.
  */
 export function parseOrdersCsv(csv: string): Order[] {
-  const lines = csv.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const lines = splitCsvRecords(csv);
   if (lines.length < 2) return [];
 
   const headers = parseCsvLine(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, "").trim());
+  // התאמה מדויקת ואם אין — התאמה חלקית (כותרות כמו "שקי בלה (60002)")
   const idx = (...names: string[]) => {
     for (const n of names) {
       const i = headers.findIndex((h) => h === n);
+      if (i >= 0) return i;
+    }
+    for (const n of names) {
+      const i = headers.findIndex((h) => h.includes(n));
       if (i >= 0) return i;
     }
     return -1;
@@ -192,11 +275,12 @@ export function parseOrdersCsv(csv: string): Order[] {
 
   const c = {
     orderId: idx("מספר הזמנה", "הזמנה", "orderId"),
-    customer: idx("שם הלקוח", "לקוח", "customerName"),
-    address: idx("כתובת", "address"),
+    customer: idx("שם לקוח", "שם הלקוח", "לקוח", "customerName"),
+    address: idx("כתובת פריקה", "כתובת", "address"),
     city: idx("עיר", "city"),
-    warehouse: idx("מחסן", "warehouse"),
-    driver: idx("נהג", "driver"),
+    warehouse: idx("מחסן יוצא", "מחסן", "warehouse"),
+    driver: idx("נהג מוקצה", "נהג", "driver"),
+    products: idx("פירוט מוצרים וכמויות", "פירוט מוצרים", "מוצרים"),
     targetTime: idx("שעת יעד", "שעה", "targetTime"),
     round: idx("סבב", "round"),
     status: idx("סטטוס", "status"),
@@ -238,6 +322,13 @@ export function parseOrdersCsv(csv: string): Order[] {
     }
 
     const order = map.get(orderId)!;
+
+    // פורמט שורה-אחת-להזמנה: כל המוצרים בתא טקסט אחד
+    const productsCell = (c.products >= 0 ? cells[c.products] : "")?.trim();
+    if (productsCell && order.items.length === 0) {
+      order.items = parseProductList(productsCell, orderId);
+    }
+
     const sku = (c.sku >= 0 ? cells[c.sku] : "")?.trim();
     if (sku) {
       const approvedRaw = (c.approved >= 0 ? cells[c.approved] : "")?.trim().toLowerCase();

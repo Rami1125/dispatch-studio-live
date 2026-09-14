@@ -16,7 +16,13 @@ import type {
   Order,
   OrderStatus,
 } from "@/types/dispatch";
-import { DRIVERS, WAREHOUSES, fetchOrdersFromSheet, getMockOrders } from "@/services/sheetsService";
+import {
+  DEFAULT_SHEET_URL,
+  DRIVERS,
+  WAREHOUSES,
+  fetchOrdersFromSheet,
+  getMockOrders,
+} from "@/services/sheetsService";
 
 interface DispatchContextValue extends DispatchState {
   /* studio */
@@ -76,8 +82,8 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const [flash, setFlash] = useState<NoaAlert | null>(null);
   const [isStudioOpen, setStudioOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [sourceMode, setSourceModeState] = useState<DataSourceMode>("mock");
-  const [sheetUrl, setSheetUrlState] = useState("");
+  const [sourceMode, setSourceModeState] = useState<DataSourceMode>("sheets");
+  const [sheetUrl, setSheetUrlState] = useState(DEFAULT_SHEET_URL);
   const [pollingSeconds, setPollingSecondsState] = useState(45);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<DispatchState["syncStatus"]>("idle");
@@ -317,7 +323,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       }>;
       if (typeof cfg.sheetUrl === "string") setSheetUrlState(cfg.sheetUrl);
       if (typeof cfg.pollingSeconds === "number") setPollingSecondsState(cfg.pollingSeconds);
-      if (cfg.sourceMode === "sheets" && cfg.sheetUrl) setSourceModeState("sheets");
+      if (cfg.sourceMode === "mock") setSourceModeState("mock");
     } catch {
       /* אחסון מקומי לא זמין */
     }
