@@ -83,15 +83,28 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "לוח שידור חי להזמנות, העמסות ונהגים של ח. סבן עם התראות נועה AI.",
       },
       { name: "author", content: "ח. סבן" },
+      { name: "theme-color", content: "#0284c7" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "סבן ליקוט" },
       { property: "og:title", content: "ח. סבן · לוח סידור והפצה חי" },
       {
         property: "og:description",
-        content: "מסך הפצה חי להקרנה בטלוויזיות המחסן, כולל פוקוס העמסה והתראות נועה AI.",
+        content: "מסך הפצה חי להקרנה בטלוויזיות המחסן וממשק PWA לליקוט מהיר למחסנאים.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
+      {
+        rel: "manifest",
+        href: "/manifest.json",
+      },
+      {
+        rel: "apple-touch-icon",
+        href: "/apple-touch-icon.png",
+      },
       {
         rel: "stylesheet",
         href: appCss,
@@ -128,6 +141,19 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then((reg) => {
+          console.log("PWA Service Worker registered:", reg.scope);
+        })
+        .catch((err) => {
+          console.warn("PWA Service Worker registration skipped:", err);
+        });
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

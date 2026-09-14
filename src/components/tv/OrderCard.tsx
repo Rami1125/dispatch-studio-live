@@ -19,7 +19,7 @@ import type { Order, OrderStatus } from "@/types/dispatch";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 
-const ALL_STATUSES: OrderStatus[] = ["ממתין", "בהעמסה", "יצא לדרך", "סופק"];
+const ALL_STATUSES: OrderStatus[] = ["ממתין", "בהכנה", "מוכן להעמסה", "בהעמסה", "יצא לדרך", "סופק"];
 
 export function OrderCard({ order, index = 0 }: { order: Order; index?: number }) {
   const { currentTime, recentlyChangedOrderIds, quickUpdateStatus } = useDispatchBoard();

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence } from "framer-motion";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { DispatchProvider, useDispatchBoard } from "@/context/DispatchContext";
 import { TVHeader } from "@/components/tv/TVHeader";
 import { UrgentDeliveriesTicker } from "@/components/tv/UrgentDeliveriesTicker";
@@ -10,6 +10,7 @@ import { LoadingFocusModal } from "@/components/tv/LoadingFocusModal";
 import { NoaFlashOverlay } from "@/components/tv/NoaFlashOverlay";
 import { StudioDrawer } from "@/components/studio/StudioDrawer";
 import { DispatchScreensaver } from "@/components/screensaver/DispatchScreensaver";
+import { PickerView } from "@/components/mobile/PickerView";
 import type { Order } from "@/types/dispatch";
 
 export const Route = createFileRoute("/")({
@@ -57,6 +58,27 @@ function RoundSection({ round, orders }: { round: number; orders: Order[] }) {
 function LiveBoard() {
   const { published, focusOrder } = useDispatchBoard();
 
+  const [viewMode, setViewMode] = useState<"tv" | "picker">(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const modeParam = urlParams.get("mode");
+      if (modeParam === "picker" || modeParam === "tv") return modeParam;
+
+      const saved = localStorage.getItem("saban_view_mode");
+      if (saved === "picker" || saved === "tv") return saved;
+
+      if (window.innerWidth < 768) return "picker";
+    }
+    return "tv";
+  });
+
+  const handleSetViewMode = (mode: "tv" | "picker") => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("saban_view_mode", mode);
+    }
+  };
+
   const rounds = useMemo(() => {
     const map = new Map<number, Order[]>();
     [...published]
@@ -69,13 +91,23 @@ function LiveBoard() {
     return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
   }, [published]);
 
+  if (viewMode === "picker") {
+    return (
+      <div dir="rtl" className="min-h-screen bg-slate-950">
+        <PickerView onSwitchToTv={() => handleSetViewMode("tv")} />
+        <StudioDrawer />
+        <NoaFlashOverlay />
+      </div>
+    );
+  }
+
   return (
     <div
       dir="rtl"
       className="flex h-screen w-screen flex-col gap-2.5 overflow-hidden bg-background p-3"
     >
       <UrgentDeliveriesTicker />
-      <TVHeader />
+      <TVHeader onSwitchToPicker={() => handleSetViewMode("picker")} />
       <NoaAIBanner />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[1.15fr_1fr]">

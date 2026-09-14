@@ -136,7 +136,7 @@ export function getMockOrders(): Order[] {
 /* Google Sheets (tab: דשבורד_הזמנות) — CSV parsing                    */
 /* ------------------------------------------------------------------ */
 
-const STATUSES: OrderStatus[] = ["ממתין", "בהעמסה", "יצא לדרך", "סופק"];
+const STATUSES: OrderStatus[] = ["ממתין", "בהכנה", "מוכן להעמסה", "בהעמסה", "יצא לדרך", "סופק"];
 
 /** Split a single CSV line honoring quoted fields. */
 export function parseCsvLine(line: string): string[] {
@@ -201,7 +201,9 @@ function toStatus(value: string | undefined): OrderStatus {
   if (STATUSES.includes(v as OrderStatus)) return v as OrderStatus;
   if (/סופק|נמסר|הושלם|בוצע/.test(v)) return "סופק";
   if (/יצא|בדרך|בהפצה|נשלח/.test(v)) return "יצא לדרך";
+  if (/מוכן|מוכן להעמסה|ברציף/.test(v)) return "מוכן להעמסה";
   if (/העמסה|נטען|מועמס/.test(v)) return "בהעמסה";
+  if (/הכנה|בהכנה|ליקוט|בליקוט/.test(v)) return "בהכנה";
   return "ממתין";
 }
 

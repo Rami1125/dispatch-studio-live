@@ -34,6 +34,12 @@ import {
   updateSheetOrderStatus,
   testSheetWebhookConnection,
 } from "@/services/sheetsService";
+import {
+  playNewOrderSound,
+  playSuccessSound,
+  playAlarmSound,
+  playStatusChime,
+} from "@/utils/soundEffects";
 
 const DEFAULT_SCREENSAVER_SETTINGS: ScreensaverSettings = {
   isEnabled: true,
@@ -236,6 +242,11 @@ interface DispatchContextValue extends DispatchState {
   currentTime: Date;
   recentlyChangedOrderIds: Record<string, number>;
   recordOrderChange: (orderId: string) => void;
+
+  /* picker workflow */
+  startPicking: (orderId: string, pickerName?: string) => void;
+  finishPicking: (orderId: string) => void;
+  reportPickerOverrun: (orderId: string) => void;
 }
 
 const DispatchContext = createContext<DispatchContextValue | null>(null);
@@ -557,29 +568,43 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       });
 
       // Flash overlay & event dispatch on urgency or status change
-      const isUrgent = newStatus === "בהעמסה";
+      const isUrgent = newStatus === "בהעמסה" || newStatus === "מוכן להעמסה";
       if (isUrgent) {
         setLatestOrderEvent({
           type: "status_urgent",
           orderId,
-          message: `הזמנה #${orderId} הועברה להעמסה כעת!`,
+          order: published.find((o) => o.orderId === orderId),
+          message: `הזמנה #${orderId} מוכנה/הועברה להעמסה כעת!`,
           timestamp: now,
         });
-        pushAlert(`הזמנה #${orderId} הועברה להעמסה כעת!`, "warning", true);
+        pushAlert(`הזמנה #${orderId} הועברה לסטטוס: ${newStatus}`, "warning", true);
+        playSuccessSound();
+      } else if (newStatus === "סופק") {
+        setLatestOrderEvent({
+          type: "status_changed",
+          orderId,
+          order: published.find((o) => o.orderId === orderId),
+          message: `הזמנה #${orderId} סופקה בהצלחה!`,
+          timestamp: now,
+        });
+        pushAlert(`הזמנה #${orderId} סופקה בהצלחה!`, "success");
+        playSuccessSound();
       } else {
         setLatestOrderEvent({
           type: "status_changed",
           orderId,
+          order: published.find((o) => o.orderId === orderId),
           message: `הזמנה #${orderId} עודכנה לסטטוס: ${newStatus}`,
           timestamp: now,
         });
         pushAlert(`הזמנה #${orderId} עודכנה לסטטוס: ${newStatus}`, "info");
+        playStatusChime();
       }
 
       // 3. Dispatch async background request to Google Apps Script Webhook (non-blocking)
       dispatchWebhookUpdate(orderId, newStatus);
     },
-    [dispatchWebhookUpdate, pushAlert, recordOrderChange],
+    [dispatchWebhookUpdate, published, pushAlert, recordOrderChange],
   );
 
   const setOrderStatus = useCallback(
@@ -594,6 +619,144 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       updateOrderStatus(orderId, status);
     },
     [updateOrderStatus],
+  );
+
+  /* ---------------- Picker Workflow (SLA 20m / 15m) ---------------- */
+  const startPicking = useCallback(
+    (orderId: string, pickerName?: string) => {
+      const now = Date.now();
+      const nowIso = new Date(now).toISOString();
+
+      try {
+        localStorage.setItem(`saban_picker_start_${orderId}`, String(now));
+      } catch {
+        /* storage unavailable */
+      }
+
+      setPublished((prev) =>
+        prev.map((o) =>
+          o.orderId === orderId
+            ? {
+                ...o,
+                status: "בהכנה",
+                pickingStartedAt: now,
+                assignedPicker: pickerName || o.assignedPicker || "מחסנאי תורן",
+                updatedAt: nowIso,
+              }
+            : o,
+        ),
+      );
+
+      setDraft((prev) =>
+        prev.map((o) =>
+          o.orderId === orderId
+            ? {
+                ...o,
+                status: "בהכנה",
+                pickingStartedAt: now,
+                assignedPicker: pickerName || o.assignedPicker || "מחסנאי תורן",
+                updatedAt: nowIso,
+              }
+            : o,
+        ),
+      );
+
+      recordOrderChange(orderId);
+
+      const overrideEntry: OrderStatusOverride = {
+        status: "בהכנה",
+        timestamp: now,
+        synced: false,
+      };
+      setOrderStatusOverrides((prev) => {
+        const next = { ...prev, [orderId]: overrideEntry };
+        saveLocalOverrides(next);
+        return next;
+      });
+
+      playStatusChime();
+
+      pushAlert(
+        `הוחל ליקוט להזמנה #${orderId} ע"י ${pickerName || "מחסנאי"} (SLA יעד 20 דק')`,
+        "info",
+      );
+      dispatchWebhookUpdate(orderId, "בהכנה");
+    },
+    [dispatchWebhookUpdate, pushAlert, recordOrderChange],
+  );
+
+  const finishPicking = useCallback(
+    (orderId: string) => {
+      const now = Date.now();
+      const nowIso = new Date(now).toISOString();
+
+      try {
+        localStorage.setItem(`saban_picker_ready_${orderId}`, String(now));
+      } catch {
+        /* storage unavailable */
+      }
+
+      setPublished((prev) =>
+        prev.map((o) =>
+          o.orderId === orderId
+            ? {
+                ...o,
+                status: "מוכן להעמסה",
+                readyForLoadingAt: now,
+                updatedAt: nowIso,
+              }
+            : o,
+        ),
+      );
+
+      setDraft((prev) =>
+        prev.map((o) =>
+          o.orderId === orderId
+            ? {
+                ...o,
+                status: "מוכן להעמסה",
+                readyForLoadingAt: now,
+                updatedAt: nowIso,
+              }
+            : o,
+        ),
+      );
+
+      recordOrderChange(orderId);
+
+      const overrideEntry: OrderStatusOverride = {
+        status: "מוכן להעמסה",
+        timestamp: now,
+        synced: false,
+      };
+      setOrderStatusOverrides((prev) => {
+        const next = { ...prev, [orderId]: overrideEntry };
+        saveLocalOverrides(next);
+        return next;
+      });
+
+      playSuccessSound();
+
+      pushAlert(
+        `הזמנה #${orderId} לוקטה במלואה ומוכנה להעמסה ברציף! נהג וסדרן עודכנו.`,
+        "success",
+        true,
+      );
+      dispatchWebhookUpdate(orderId, "מוכן להעמסה");
+    },
+    [dispatchWebhookUpdate, pushAlert, recordOrderChange],
+  );
+
+  const reportPickerOverrun = useCallback(
+    (orderId: string) => {
+      playAlarmSound();
+      pushAlert(
+        `חריגת ליקוט חמורה (מעל 20 דק') בהזמנה #${orderId}! יש לתגבר את המחסן מיד.`,
+        "critical",
+        true,
+      );
+    },
+    [pushAlert],
   );
 
   /* ---------------- Draft Editing ---------------- */
@@ -706,15 +869,16 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
             message: msg,
             timestamp: Date.now(),
           });
-          // Trigger NoaFlashOverlay for new order alert
+          // Trigger NoaFlashOverlay for new order alert and play audio chime
           pushAlert(msg, "warning", true);
+          playNewOrderSound();
           return;
         }
 
         // 2. Status change detected from sheet update
         if (before.status !== order.status) {
           recordOrderChange(order.orderId);
-          const isUrgent = order.status === "בהעמסה";
+          const isUrgent = order.status === "בהעמסה" || order.status === "מוכן להעמסה";
           const msg = `סטטוס עודכן — הזמנה ${order.orderId} ${order.customerName}: ${order.status}`;
 
           if (isUrgent) {
@@ -726,6 +890,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
               timestamp: Date.now(),
             });
             pushAlert(msg, "warning", true);
+            playSuccessSound();
           } else {
             setLatestOrderEvent({
               type: "status_changed",
@@ -735,6 +900,11 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
               timestamp: Date.now(),
             });
             pushAlert(msg, order.status === "סופק" ? "success" : "info");
+            if (order.status === "סופק") {
+              playSuccessSound();
+            } else {
+              playStatusChime();
+            }
           }
         }
 
@@ -1193,12 +1363,16 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const counts = useMemo(() => {
     const base: Record<OrderStatus, number> = {
       ממתין: 0,
+      בהכנה: 0,
+      "מוכן להעמסה": 0,
       בהעמסה: 0,
       "יצא לדרך": 0,
       סופק: 0,
     };
     published.forEach((o) => {
-      base[o.status] += 1;
+      if (base[o.status] !== undefined) {
+        base[o.status] += 1;
+      }
     });
     return base;
   }, [published]);
@@ -1254,6 +1428,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     currentTime,
     recentlyChangedOrderIds,
     recordOrderChange,
+    /* picker workflow */
+    startPicking,
+    finishPicking,
+    reportPickerOverrun,
     /* screensaver */
     isScreensaverActive,
     setScreensaverActive,

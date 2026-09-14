@@ -1,7 +1,18 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Cloud, CloudOff, Monitor, RefreshCw, Settings2, Truck } from "lucide-react";
+import {
+  Cloud,
+  CloudOff,
+  Monitor,
+  RefreshCw,
+  Settings2,
+  Smartphone,
+  Truck,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
+import { isAudioMuted, toggleAudioMute, subscribeSoundMute } from "@/utils/soundEffects";
 import { cn } from "@/lib/utils";
 
 function useClock() {
@@ -23,7 +34,7 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: st
   );
 }
 
-export function TVHeader() {
+export function TVHeader({ onSwitchToPicker }: { onSwitchToPicker?: () => void }) {
   const {
     counts,
     published,
@@ -35,6 +46,11 @@ export function TVHeader() {
     nearestOrderMinutesRemaining,
   } = useDispatchBoard();
   const now = useClock();
+  const [isMuted, setIsMuted] = useState(isAudioMuted());
+
+  useEffect(() => {
+    return subscribeSoundMute((muted) => setIsMuted(muted));
+  }, []);
 
   const time = now
     ? now.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
@@ -63,13 +79,42 @@ export function TVHeader() {
 
       <div className="flex items-center gap-3">
         <Metric label="ממתין" value={counts["ממתין"]} tone="text-slate-600" />
+        {counts["בהכנה"] > 0 && (
+          <Metric label="בליקוט" value={counts["בהכנה"]} tone="text-amber-500" />
+        )}
         <Metric label="בהעמסה" value={counts["בהעמסה"]} tone="text-accent" />
         <Metric label="בדרך" value={counts["יצא לדרך"]} tone="text-primary" />
         <Metric label="סופק" value={counts["סופק"]} tone="text-emerald-600" />
         <Metric label="סה״כ" value={published.length} tone="text-foreground" />
       </div>
 
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-4">
+        {/* Switch to Picker View Button */}
+        {onSwitchToPicker && (
+          <button
+            onClick={onSwitchToPicker}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-sky-600/20 border border-amber-500/30 px-3.5 py-2 text-xs font-black text-amber-300 hover:text-white hover:border-amber-400 transition-all shadow-sm"
+            title="מעבר לממשק ליקוט מחסן PWA (אורן / תמיר)"
+          >
+            <Smartphone className="size-4 text-amber-400" />
+            <span>מסוף ליקוט PWA</span>
+          </button>
+        )}
+
+        {/* Audio Mute/Unmute toggle */}
+        <button
+          onClick={() => toggleAudioMute()}
+          className={cn(
+            "grid size-10 place-items-center rounded-xl ring-1 ring-inset transition",
+            isMuted
+              ? "bg-rose-500/10 text-rose-500 ring-rose-500/30 hover:bg-rose-500/20"
+              : "bg-emerald-500/10 text-emerald-600 ring-emerald-500/30 hover:bg-emerald-500/20",
+          )}
+          title={isMuted ? "בטל השתקת צלילים והתראות" : "השתק צלילי מערכת"}
+        >
+          {isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+        </button>
+
         {/* Screensaver fast switch */}
         <button
           onClick={() => setScreensaverActive(true)}

@@ -1,4 +1,4 @@
-export type OrderStatus = "ממתין" | "בהעמסה" | "יצא לדרך" | "סופק";
+export type OrderStatus = "ממתין" | "בהכנה" | "מוכן להעמסה" | "בהעמסה" | "יצא לדרך" | "סופק";
 
 export interface OrderItem {
   sku: string;
@@ -44,6 +44,10 @@ export interface Order {
   items: OrderItem[];
   note?: string;
   updatedAt?: string;
+  pickingStartedAt?: number;
+  readyForLoadingAt?: number;
+  assignedPicker?: string;
+  deposits?: string[];
 }
 
 export type AlertLevel = "info" | "warning" | "critical" | "success";
