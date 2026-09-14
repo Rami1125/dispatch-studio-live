@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { handleGenerateInsight, type GenerateInsightRequest } from "./server/geminiService";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -47,6 +48,188 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+
+      // Handle AI API endpoints server-side
+      if (url.pathname === "/api/ai/insights" && request.method === "POST") {
+        try {
+          const body = (await request.json()) as GenerateInsightRequest;
+          const result = await handleGenerateInsight(body);
+          return new Response(JSON.stringify(result), {
+            status: 200,
+            headers: { "content-type": "application/json; charset=utf-8" },
+          });
+        } catch (err) {
+          console.error("Error in /api/ai/insights:", err);
+          return new Response(
+            JSON.stringify({
+              error: err instanceof Error ? err.message : "Internal AI Error",
+            }),
+            {
+              status: 500,
+              headers: { "content-type": "application/json; charset=utf-8" },
+            },
+          );
+        }
+      }
+
+      // Handle Google Sheets Status Write-Back
+      if (url.pathname === "/api/sheets/update-status" && request.method === "POST") {
+        try {
+          const body = (await request.json()) as {
+            orderId: string;
+            status: string;
+            webhookUrl?: string;
+            sheetName?: string;
+          };
+          const { orderId, status } = body;
+          const webhookUrl = body.webhookUrl || process.env.SHEETS_WEBHOOK_URL;
+          const sheetName = body.sheetName || "דשבורד_הזמנות";
+
+          if (!orderId || !status) {
+            return new Response(
+              JSON.stringify({ success: false, error: "Missing orderId or status" }),
+              { status: 400, headers: { "content-type": "application/json; charset=utf-8" } },
+            );
+          }
+
+          if (webhookUrl) {
+            const scriptRes = await fetch(webhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ orderId, status, sheetName }),
+              redirect: "follow",
+            });
+
+            const responseText = await scriptRes.text();
+            let scriptJson: {
+              success?: boolean;
+              message?: string;
+              updatedAt?: string;
+              row?: number;
+              error?: string;
+            } | null = null;
+
+            try {
+              scriptJson = JSON.parse(responseText);
+            } catch {
+              /* response was not json */
+            }
+
+            if (scriptJson && scriptJson.success) {
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  orderId,
+                  status,
+                  syncedToSheet: true,
+                  message: scriptJson.message || `עודכן בהצלחה בעמודת סטטוס בגיליון ${sheetName}`,
+                  updatedAt: scriptJson.updatedAt || new Date().toISOString(),
+                  row: scriptJson.row,
+                }),
+                { status: 200, headers: { "content-type": "application/json; charset=utf-8" } },
+              );
+            }
+
+            return new Response(
+              JSON.stringify({
+                success: false,
+                orderId,
+                status,
+                syncedToSheet: false,
+                error:
+                  scriptJson?.error ||
+                  scriptJson?.message ||
+                  responseText.slice(0, 200) ||
+                  "Webhook error",
+              }),
+              { status: 200, headers: { "content-type": "application/json; charset=utf-8" } },
+            );
+          }
+
+          // No webhook configured yet
+          return new Response(
+            JSON.stringify({
+              success: true,
+              orderId,
+              status,
+              syncedToSheet: false,
+              message:
+                "הסטטוס עודכן בלוח ונשמר בזיכרון המערכת. לחץ על הגדרות שידור להפעלת Webhook לסנכרון ישיר ל-Google Sheets.",
+              updatedAt: new Date().toISOString(),
+            }),
+            { status: 200, headers: { "content-type": "application/json; charset=utf-8" } },
+          );
+        } catch (err) {
+          console.error("Error in /api/sheets/update-status:", err);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: err instanceof Error ? err.message : "Internal Server Error",
+            }),
+            { status: 500, headers: { "content-type": "application/json; charset=utf-8" } },
+          );
+        }
+      }
+
+      // Handle Webhook test connection
+      if (url.pathname === "/api/sheets/test-connection" && request.method === "POST") {
+        try {
+          const body = (await request.json()) as { webhookUrl?: string };
+          const webhookUrl = body.webhookUrl || process.env.SHEETS_WEBHOOK_URL;
+          if (!webhookUrl) {
+            return new Response(
+              JSON.stringify({ success: false, error: "לא סופקה כתובת Webhook" }),
+              { status: 400, headers: { "content-type": "application/json; charset=utf-8" } },
+            );
+          }
+
+          const testRes = await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ping: true }),
+            redirect: "follow",
+          });
+
+          const text = await testRes.text();
+          let json: { success?: boolean; message?: string; error?: string } | null = null;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            /* not json */
+          }
+
+          if (json && json.success) {
+            return new Response(
+              JSON.stringify({
+                success: true,
+                message: json.message || "חיבור תקין ל-Google Apps Script!",
+              }),
+              { status: 200, headers: { "content-type": "application/json; charset=utf-8" } },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error:
+                json?.error ||
+                text.slice(0, 200) ||
+                `תגובה לא צפויה מ-Webhook (${testRes.status})`,
+            }),
+            { status: 200, headers: { "content-type": "application/json; charset=utf-8" } },
+          );
+        } catch (err) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: err instanceof Error ? err.message : "שגיאת רשת בבדיקת חיבור",
+            }),
+            { status: 500, headers: { "content-type": "application/json; charset=utf-8" } },
+          );
+        }
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

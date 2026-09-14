@@ -291,6 +291,7 @@ export function parseOrdersCsv(csv: string): Order[] {
     itemName: idx("תיאור המוצר", "תיאור", "name"),
     quantity: idx("כמות", "quantity"),
     approved: idx("אושר", "אישור", "isApproved"),
+    updatedAt: idx("תאריך עדכון", "תאריך", "updatedAt", "עדכון"),
   };
 
   const map = new Map<string, Order>();
@@ -301,6 +302,7 @@ export function parseOrdersCsv(csv: string): Order[] {
     if (!orderId) continue;
 
     if (!map.has(orderId)) {
+      const rawDate = (c.updatedAt >= 0 ? cells[c.updatedAt] : "")?.trim();
       map.set(orderId, {
         orderId,
         customerName: (c.customer >= 0 ? cells[c.customer] : "") || "ללא שם",
@@ -317,7 +319,7 @@ export function parseOrdersCsv(csv: string): Order[] {
           estimatedWeightKg: toNumber(c.weight >= 0 ? cells[c.weight] : ""),
         },
         items: [],
-        updatedAt: new Date().toISOString(),
+        updatedAt: rawDate || new Date().toISOString(),
       });
     }
 
@@ -362,3 +364,190 @@ export async function fetchOrdersFromSheet(url: string): Promise<Order[]> {
   if (orders.length === 0) throw new Error("לא נמצאו שורות בגיליון דשבורד_הזמנות");
   return orders;
 }
+
+/* ------------------------------------------------------------------ */
+/* Google Sheets Status Column Write-Back Service                     */
+/* ------------------------------------------------------------------ */
+
+export interface UpdateStatusPayload {
+  orderId: string;
+  status: OrderStatus;
+  webhookUrl?: string;
+  spreadsheetId?: string;
+  sheetName?: string;
+}
+
+export interface UpdateStatusResult {
+  success: boolean;
+  orderId: string;
+  status: OrderStatus;
+  syncedToSheet: boolean;
+  message: string;
+  updatedAt: string;
+  row?: number;
+  statusColumn?: number;
+  error?: string;
+}
+
+/**
+ * שולח בקשת עדכון סטטוס לעמודת 'סטטוס' בגיליון Google Sheets.
+ * קורא לשרת Proxy מקומי (/api/sheets/update-status) המזרים ישירות ל-Google Apps Script Webhook.
+ */
+export async function updateSheetOrderStatus(
+  payload: UpdateStatusPayload,
+): Promise<UpdateStatusResult> {
+  const res = await fetch("/api/sheets/update-status", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    let msg = `שגיאת שרת (${res.status})`;
+    try {
+      const parsed = JSON.parse(errorText) as { error?: string; message?: string };
+      msg = parsed.error || parsed.message || msg;
+    } catch {
+      msg = errorText || msg;
+    }
+    throw new Error(msg);
+  }
+
+  return (await res.json()) as UpdateStatusResult;
+}
+
+/**
+ * בודק תקינות חיבור כתיבה ל-Google Apps Script Webhook
+ */
+export async function testSheetWebhookConnection(
+  webhookUrl: string,
+): Promise<{ success: boolean; message: string }> {
+  const res = await fetch("/api/sheets/test-connection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ webhookUrl }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    let msg = `בדיקת חיבור נכשלה (${res.status})`;
+    try {
+      const parsed = JSON.parse(errText) as { error?: string; message?: string };
+      msg = parsed.error || parsed.message || msg;
+    } catch {
+      msg = errText || msg;
+    }
+    throw new Error(msg);
+  }
+
+  return (await res.json()) as { success: boolean; message: string };
+}
+
+/**
+ * קוד Google Apps Script מלא להעתקה בלחיצת כפתור אחת.
+ * מותאם בדיוק למבנה הגיליון 'נועה Ai' / 'דשבורד_הזמנות':
+ * מאתר לפי עמודה A (מספר הזמנה), ומעדכן את עמודה N (סטטוס) ועמודה T (תאריך עדכון).
+ */
+export const APPS_SCRIPT_TEMPLATE = `/**
+ * Google Apps Script Web App - עדכון עמודת סטטוס עבור ח. סבן
+ * קובץ: נועה Ai | טאב: דשבורד_הזמנות
+ * פריסה: Extensions -> Apps Script -> הדבק -> Deploy as Web App (Anyone)
+ */
+
+function doGet(e) {
+  return handleStatusUpdate(e.parameter || {});
+}
+
+function doPost(e) {
+  var params = {};
+  if (e.postData && e.postData.contents) {
+    try {
+      params = JSON.parse(e.postData.contents);
+    } catch(err) {
+      params = e.parameter || {};
+    }
+  } else {
+    params = e.parameter || {};
+  }
+  return handleStatusUpdate(params);
+}
+
+function handleStatusUpdate(params) {
+  // בדיקת פינג
+  if (params.ping) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      message: "חיבור Google Apps Script לעמודת סטטוס פעיל ומגיב בהצלחה!"
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var orderId = String(params.orderId || "").trim();
+  var newStatus = String(params.status || "").trim();
+  var sheetName = String(params.sheetName || "דשבורד_הזמנות").trim();
+
+  if (!orderId || !newStatus) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: "חסר מספר הזמנה (orderId) או סטטוס (status)"
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName) || ss.getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: "לא נמצאו נתונים בגיליון " + sheetName
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var headers = data[0];
+  var orderIdCol = 0;   // עמודה A - מספר הזמנה
+  var statusCol = 13;   // עמודה N - סטטוס (עמודה 14)
+  var updateDateCol = 19; // עמודה T - תאריך עדכון (עמודה 20)
+
+  for (var c = 0; c < headers.length; c++) {
+    var h = String(headers[c] || "").trim();
+    if (h === "מספר הזמנה" || h === "הזמנה" || h === "orderId") orderIdCol = c;
+    if (h === "סטטוס" || h === "status") statusCol = c;
+    if (h === "תאריך עדכון" || h === "updatedAt" || h === "עדכון") updateDateCol = c;
+  }
+
+  var rowIndex = -1;
+  for (var r = 1; r < data.length; r++) {
+    var cellId = String(data[r][orderIdCol]).trim();
+    if (cellId === orderId) {
+      rowIndex = r + 1; // שורה 1-indexed בגוגל שיטס
+      break;
+    }
+  }
+
+  if (rowIndex === -1) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      orderId: orderId,
+      error: "הזמנה #" + orderId + " לא אותרה בגיליון " + sheetName
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // עדכון ישיר של עמודת סטטוס בגיליון
+  sheet.getRange(rowIndex, statusCol + 1).setValue(newStatus);
+
+  // עדכון חותמת זמן ישראל
+  var nowStr = Utilities.formatDate(new Date(), "Asia/Jerusalem", "yyyy-MM-dd HH:mm:ss");
+  sheet.getRange(rowIndex, updateDateCol + 1).setValue(nowStr);
+
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    orderId: orderId,
+    status: newStatus,
+    updatedAt: nowStr,
+    row: rowIndex,
+    statusColumn: statusCol + 1,
+    message: "עודכן בהצלחה בעמודת סטטוס (שורה " + rowIndex + ") בגיליון " + sheetName
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+`;
+

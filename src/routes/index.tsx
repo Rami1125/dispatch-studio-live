@@ -3,11 +3,13 @@ import { AnimatePresence } from "framer-motion";
 import { useMemo } from "react";
 import { DispatchProvider, useDispatchBoard } from "@/context/DispatchContext";
 import { TVHeader } from "@/components/tv/TVHeader";
+import { UrgentDeliveriesTicker } from "@/components/tv/UrgentDeliveriesTicker";
 import { NoaAIBanner } from "@/components/tv/NoaAIBanner";
 import { OrderCard } from "@/components/tv/OrderCard";
 import { LoadingFocusModal } from "@/components/tv/LoadingFocusModal";
 import { NoaFlashOverlay } from "@/components/tv/NoaFlashOverlay";
 import { StudioDrawer } from "@/components/studio/StudioDrawer";
+import { DispatchScreensaver } from "@/components/screensaver/DispatchScreensaver";
 import type { Order } from "@/types/dispatch";
 
 export const Route = createFileRoute("/")({
@@ -70,8 +72,9 @@ function LiveBoard() {
   return (
     <div
       dir="rtl"
-      className="flex h-screen w-screen flex-col gap-3 overflow-hidden bg-background p-4"
+      className="flex h-screen w-screen flex-col gap-2.5 overflow-hidden bg-background p-3"
     >
+      <UrgentDeliveriesTicker />
       <TVHeader />
       <NoaAIBanner />
 
@@ -90,6 +93,7 @@ function LiveBoard() {
 
       <StudioDrawer />
       <NoaFlashOverlay />
+      <DispatchScreensaver />
     </div>
   );
 }

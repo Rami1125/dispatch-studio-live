@@ -4,6 +4,7 @@ import { useDispatchBoard } from "@/context/DispatchContext";
 import { BroadcastControl } from "./BroadcastControl";
 import { OrderEditor } from "./OrderEditor";
 import { QuickTemplates } from "./QuickTemplates";
+import { AITrainerStudio } from "./AITrainerStudio";
 
 export function StudioDrawer() {
   const { isStudioOpen, closeStudio } = useDispatchBoard();
@@ -48,6 +49,7 @@ export function StudioDrawer() {
             </header>
 
             <div className="flex-1 space-y-5 overflow-y-auto p-4">
+              <AITrainerStudio />
               <BroadcastControl />
               <QuickTemplates />
               <OrderEditor />

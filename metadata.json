@@ -1,6 +1,6 @@
 {
   "name": "Dispatch Studio Live",
-  "description": "Live logistics and dispatch studio management dashboard for orders, loading focus, and driver coordination.",
+  "description": "Live logistics and dispatch studio management dashboard for orders, live urgent deliveries ticker, loading focus, AI operational briefings, ambient screensaver, traffic ETAs, and driver coordination.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

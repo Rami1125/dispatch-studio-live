@@ -21,7 +21,7 @@ function LevelIcon({ level }: { level: AlertLevel }) {
 }
 
 export function NoaAIBanner() {
-  const { alerts, published, warehouses } = useDispatchBoard();
+  const { alerts, published, warehouses, targetedBriefings } = useDispatchBoard();
   const [index, setIndex] = useState(0);
 
   const derived: NoaAlert[] = useMemo(() => {
@@ -29,6 +29,26 @@ export function NoaAIBanner() {
     const loading = published.filter((o) => o.status === "בהעמסה");
     const driving = published.filter((o) => o.status === "יצא לדרך");
     const waiting = published.filter((o) => o.status === "ממתין");
+
+    // Warehouse directive from AI
+    if (targetedBriefings.forWarehouse) {
+      list.push({
+        id: "ai-wh-directive",
+        level: "warning",
+        message: `🏗️ למחסנאי: ${targetedBriefings.forWarehouse}`,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Driver & traffic directive from AI
+    if (targetedBriefings.forDriver) {
+      list.push({
+        id: "ai-driver-directive",
+        level: "info",
+        message: `🚛 לנהגים בצירים: ${targetedBriefings.forDriver}`,
+        createdAt: new Date().toISOString(),
+      });
+    }
 
     list.push({
       id: "sum-drivers",
@@ -59,7 +79,7 @@ export function NoaAIBanner() {
     });
 
     return list;
-  }, [published, warehouses]);
+  }, [published, warehouses, targetedBriefings]);
 
   const feed = useMemo(() => [...alerts.filter((a) => !a.isFlash), ...derived], [alerts, derived]);
 

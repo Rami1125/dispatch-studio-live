@@ -59,6 +59,16 @@ export interface NoaAlert {
   durationMs?: number;
 }
 
+export interface StatusSyncRecord {
+  orderId: string;
+  status: OrderStatus;
+  updatedAt: string;
+  syncedToSheet: boolean;
+  syncError?: string;
+  lastAttemptAt?: string;
+  message?: string;
+}
+
 export type DataSourceMode = "mock" | "sheets";
 
 export interface DispatchState {
@@ -72,6 +82,8 @@ export interface DispatchState {
   warehouses: Warehouse[];
   sourceMode: DataSourceMode;
   sheetUrl: string;
+  webhookUrl: string;
+  statusSyncRecords: Record<string, StatusSyncRecord>;
   pollingSeconds: number;
   lastSyncAt: string | null;
   syncStatus: "idle" | "syncing" | "ok" | "error";

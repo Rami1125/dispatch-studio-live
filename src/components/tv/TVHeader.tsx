@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Cloud, CloudOff, RefreshCw, Settings2, Truck } from "lucide-react";
+import { Cloud, CloudOff, Monitor, RefreshCw, Settings2, Truck } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +24,16 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: st
 }
 
 export function TVHeader() {
-  const { counts, published, syncStatus, lastSyncAt, sourceMode, openStudio } = useDispatchBoard();
+  const {
+    counts,
+    published,
+    syncStatus,
+    lastSyncAt,
+    sourceMode,
+    openStudio,
+    setScreensaverActive,
+    nearestOrderMinutesRemaining,
+  } = useDispatchBoard();
   const now = useClock();
 
   const time = now
@@ -61,6 +70,19 @@ export function TVHeader() {
       </div>
 
       <div className="flex items-center gap-5">
+        {/* Screensaver fast switch */}
+        <button
+          onClick={() => setScreensaverActive(true)}
+          className="flex items-center gap-2 rounded-xl bg-secondary/80 px-3 py-2 text-xs font-bold text-foreground ring-1 ring-border transition hover:bg-primary hover:text-primary-foreground"
+          title={`הפעל שומר מסך (הזמנה קרובה: ${nearestOrderMinutesRemaining !== null && nearestOrderMinutesRemaining < 900 ? `${nearestOrderMinutesRemaining} דק'` : "ללא הזמנות"})`}
+        >
+          <Monitor className="size-4" />
+          <span>שומר מסך</span>
+          {nearestOrderMinutesRemaining !== null && nearestOrderMinutesRemaining >= 45 && (
+            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+          )}
+        </button>
+
         <div
           className={cn(
             "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ring-1 ring-inset",

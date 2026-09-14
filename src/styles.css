@@ -169,3 +169,33 @@
     background: transparent;
   }
 }
+
+@keyframes ticker-scroll-rtl {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(50%);
+  }
+}
+
+@keyframes ticker-scroll-ltr {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker-marquee-rtl {
+  animation: ticker-scroll-rtl var(--ticker-speed, 40s) linear infinite;
+}
+
+.animate-ticker-marquee-ltr {
+  animation: ticker-scroll-ltr var(--ticker-speed, 40s) linear infinite;
+}
+
+.animate-ticker-paused {
+  animation-play-state: paused !important;
+}

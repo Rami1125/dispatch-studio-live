@@ -15,14 +15,76 @@ import type {
   NoaAlert,
   Order,
   OrderStatus,
+  StatusSyncRecord,
 } from "@/types/dispatch";
+import type {
+  ScreensaverSettings,
+  ScheduledBroadcast,
+  AITrainingSettings,
+} from "@/types/screensaver";
 import {
   DEFAULT_SHEET_URL,
   DRIVERS,
   WAREHOUSES,
   fetchOrdersFromSheet,
   getMockOrders,
+  updateSheetOrderStatus,
+  testSheetWebhookConnection,
 } from "@/services/sheetsService";
+
+const DEFAULT_SCREENSAVER_SETTINGS: ScreensaverSettings = {
+  isEnabled: true,
+  idleTimeoutSeconds: 90, // 90 שניות של חוסר פעילות
+  minOrderGapMinutes: 45, // אם ההזמנה הקרובה רחוקה מ-45 דקות או שאין הזמנות
+  activeMode: "mixed",
+  autoCycle: true,
+  cycleIntervalSeconds: 12,
+  videoSource: "warehouse-ambient",
+  videoMuted: true,
+  autoVideoOnLull: true,
+};
+
+const DEFAULT_AI_TRAINING: AITrainingSettings = {
+  focusMode: "safety",
+  customPromptRule: "תעדוף בטיחות בהעמסת שקי בלה ומשטחי סבן, והתראה על עומסים בצירים 1 ו-40",
+  temperature: 0.3,
+  autoPushToTV: true,
+};
+
+const DEFAULT_SCHEDULED_MESSAGES: ScheduledBroadcast[] = [
+  {
+    id: "sch-1",
+    time: "07:30",
+    target: "all",
+    title: "תדריך בוקר",
+    content: "בדיקת שמן ומים במשאיות מנוף, ספירת מלאי שקי בלה במחסן 7",
+    isActive: true,
+  },
+  {
+    id: "sch-2",
+    time: "11:30",
+    target: "warehouse",
+    title: "הכנת סבב 2",
+    content: "ריכוז משטחי סבן 60060 ברציף העמסה מרכזי",
+    isActive: true,
+  },
+  {
+    id: "sch-3",
+    time: "13:30",
+    target: "driver",
+    title: "עומסי צהריים",
+    content: "הימנעות מכביש 40, עדיפות לציר 431 לכיוון רמלה וראשל״צ",
+    isActive: true,
+  },
+  {
+    id: "sch-4",
+    time: "16:00",
+    target: "all",
+    title: "סיכום יומי",
+    content: "קשירת רצועות, נעילת שער מחסן 1 ובדיקת תעודות משלוח",
+    isActive: true,
+  },
+];
 
 interface DispatchContextValue extends DispatchState {
   /* studio */
@@ -36,6 +98,7 @@ interface DispatchContextValue extends DispatchState {
   /* draft editing */
   updateOrder: (orderId: string, patch: Partial<Order>) => void;
   setOrderStatus: (orderId: string, status: OrderStatus) => void;
+  quickUpdateStatus: (orderId: string, status: OrderStatus) => void;
   toggleItemApproval: (orderId: string, sku: string) => void;
   approveAllItems: (orderId: string, approved: boolean) => void;
   updateItemQuantity: (orderId: string, sku: string, quantity: number) => void;
@@ -49,11 +112,40 @@ interface DispatchContextValue extends DispatchState {
   dismissFlash: () => void;
   removeAlert: (id: string) => void;
 
-  /* data source */
+  /* data source & sheets write-back */
   setSourceMode: (mode: DataSourceMode) => void;
   setSheetUrl: (url: string) => void;
+  setWebhookUrl: (url: string) => void;
   setPollingSeconds: (seconds: number) => void;
   syncNow: () => Promise<void>;
+  syncStatusToSheet: (orderId: string, status: OrderStatus) => Promise<boolean>;
+  syncAllStatusesToSheet: () => Promise<void>;
+  testSheetWriteConnection: () => Promise<{ success: boolean; message: string }>;
+
+  /* screensaver */
+  isScreensaverActive: boolean;
+  setScreensaverActive: (active: boolean) => void;
+  screensaverSettings: ScreensaverSettings;
+  updateScreensaverSettings: (patch: Partial<ScreensaverSettings>) => void;
+  nearestOrderMinutesRemaining: number | null;
+  idleSecondsCount: number;
+
+  /* AI model training & dispatching */
+  aiTraining: AITrainingSettings;
+  updateAITraining: (patch: Partial<AITrainingSettings>) => void;
+  scheduledMessages: ScheduledBroadcast[];
+  addScheduledMessage: (msg: Omit<ScheduledBroadcast, "id">) => void;
+  toggleScheduledMessage: (id: string, active: boolean) => void;
+  deleteScheduledMessage: (id: string) => void;
+  targetedBriefings: {
+    forWarehouse: string;
+    forDriver: string;
+    scheduledNotice: string;
+    trafficAdvice: string;
+    updatedAt: string;
+  };
+  generateAIBriefing: (customPrompt?: string) => Promise<void>;
+  isGeneratingAI: boolean;
 
   /* derived */
   focusOrder: Order | null;
@@ -89,6 +181,107 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<DispatchState["syncStatus"]>("idle");
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+
+  /* ---------------- screensaver state ---------------- */
+  const [isScreensaverActive, setScreensaverActive] = useState(false);
+  const [screensaverSettings, setScreensaverSettings] = useState<ScreensaverSettings>(() => {
+    try {
+      const raw = localStorage.getItem("saban-screensaver-cfg");
+      return raw
+        ? { ...DEFAULT_SCREENSAVER_SETTINGS, ...JSON.parse(raw) }
+        : DEFAULT_SCREENSAVER_SETTINGS;
+    } catch {
+      return DEFAULT_SCREENSAVER_SETTINGS;
+    }
+  });
+  const [idleSecondsCount, setIdleSecondsCount] = useState(0);
+  const lastInteractionTime = useRef(Date.now());
+
+  /* ---------------- AI model & schedule state ---------------- */
+  const [aiTraining, setAiTraining] = useState<AITrainingSettings>(() => {
+    try {
+      const raw = localStorage.getItem("saban-ai-training-cfg");
+      return raw ? { ...DEFAULT_AI_TRAINING, ...JSON.parse(raw) } : DEFAULT_AI_TRAINING;
+    } catch {
+      return DEFAULT_AI_TRAINING;
+    }
+  });
+  const [scheduledMessages, setScheduledMessages] = useState<ScheduledBroadcast[]>(() => {
+    try {
+      const raw = localStorage.getItem("saban-scheduled-broadcasts");
+      return raw ? JSON.parse(raw) : DEFAULT_SCHEDULED_MESSAGES;
+    } catch {
+      return DEFAULT_SCHEDULED_MESSAGES;
+    }
+  });
+  const [targetedBriefings, setTargetedBriefings] = useState({
+    forWarehouse: "לתעדף העמסת שקי בלה צמוד לקבינה ולאחריהם משטחי סבן 60060.",
+    forDriver: "עומס בכביש 1 לכיוון שער הגיא (14 דק' עיכוב). מומלץ שימוש בציר 431.",
+    scheduledNotice: "הכנת סבב הבא: וידוא תעודות משלוח חתומות עם המנופאי.",
+    trafficAdvice: "כביש 6 וכביש 4 זורמים חלק. כביש 40 פקוק מצומת אחיסמך.",
+    updatedAt: "08:15",
+  });
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+
+  const updateScreensaverSettings = useCallback((patch: Partial<ScreensaverSettings>) => {
+    setScreensaverSettings((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        localStorage.setItem("saban-screensaver-cfg", JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  }, []);
+
+  const updateAITraining = useCallback((patch: Partial<AITrainingSettings>) => {
+    setAiTraining((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        localStorage.setItem("saban-ai-training-cfg", JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  }, []);
+
+  const addScheduledMessage = useCallback((msg: Omit<ScheduledBroadcast, "id">) => {
+    setScheduledMessages((prev) => {
+      const next = [...prev, { ...msg, id: `sch-${uid()}` }];
+      try {
+        localStorage.setItem("saban-scheduled-broadcasts", JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleScheduledMessage = useCallback((id: string, active: boolean) => {
+    setScheduledMessages((prev) => {
+      const next = prev.map((m) => (m.id === id ? { ...m, isActive: active } : m));
+      try {
+        localStorage.setItem("saban-scheduled-broadcasts", JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  }, []);
+
+  const deleteScheduledMessage = useCallback((id: string) => {
+    setScheduledMessages((prev) => {
+      const next = prev.filter((m) => m.id !== id);
+      try {
+        localStorage.setItem("saban-scheduled-broadcasts", JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  }, []);
 
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -141,6 +334,20 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       updateOrder(orderId, { status });
     },
     [updateOrder],
+  );
+
+  const quickUpdateStatus = useCallback(
+    (orderId: string, status: OrderStatus) => {
+      const nowIso = new Date().toISOString();
+      setPublished((prev) =>
+        prev.map((o) => (o.orderId === orderId ? { ...o, status, updatedAt: nowIso } : o)),
+      );
+      setDraft((prev) =>
+        prev.map((o) => (o.orderId === orderId ? { ...o, status, updatedAt: nowIso } : o)),
+      );
+      pushAlert(`הזמנה #${orderId} עודכנה ישירות לסטטוס: ${status}`, "info");
+    },
+    [pushAlert],
   );
 
   const toggleItemApproval = useCallback(
@@ -375,6 +582,164 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [published]);
 
+  /* ---------------- AI briefing generator ---------------- */
+  const generateAIBriefing = useCallback(
+    async (customPrompt?: string) => {
+      setIsGeneratingAI(true);
+      try {
+        const busiestWh = [...WAREHOUSES].sort((a, b) => b.loadRatio - a.loadRatio)[0];
+        const res = await fetch("/api/ai/insights", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            prompt: customPrompt || aiTraining.customPromptRule,
+            trainingFocus: aiTraining.focusMode,
+            contextData: {
+              activeOrdersCount: published.length,
+              loadingOrdersCount: published.filter((o) => o.status === "בהעמסה").length,
+              busiestWarehouse: busiestWh
+                ? `${busiestWh.name} (${Math.round(busiestWh.loadRatio * 100)}%)`
+                : "מחסן 7",
+              trafficSummary: "עומס בכביש 1 לכיוון שער הגיא ועומס בציר 40",
+              totalWeightKg: published.reduce(
+                (s, o) => s + o.logisticsMetrics.estimatedWeightKg,
+                0,
+              ),
+            },
+          }),
+        });
+
+        if (res.ok) {
+          const data = (await res.json()) as {
+            message?: string;
+            roleSpecificBriefing?: {
+              forWarehouse?: string;
+              forDriver?: string;
+              scheduledNotice?: string;
+            };
+            trafficAdvice?: string;
+            suggestedLevel?: AlertLevel;
+          };
+
+          setTargetedBriefings({
+            forWarehouse:
+              data.roleSpecificBriefing?.forWarehouse ||
+              "לתעדף העמסת שקי בלה צמוד לקבינה ולאחריהם משטחי סבן 60060.",
+            forDriver:
+              data.roleSpecificBriefing?.forDriver ||
+              "עומס בכביש 1 לכיוון שער הגיא (14 דק' עיכוב). מומלץ שימוש בציר 431.",
+            scheduledNotice:
+              data.roleSpecificBriefing?.scheduledNotice ||
+              "הכנת סבב הבא: וידוא תעודות משלוח חתומות עם המנופאי.",
+            trafficAdvice:
+              data.trafficAdvice || "כביש 6 וכביש 4 זורמים חלק. כביש 40 פקוק מצומת אחיסמך.",
+            updatedAt: new Date().toLocaleTimeString("he-IL", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          });
+
+          if (data.message) {
+            pushAlert(data.message, data.suggestedLevel || "info");
+          }
+        }
+      } catch (err) {
+        console.warn("AI generation failed, fallback remains active:", err);
+      } finally {
+        setIsGeneratingAI(false);
+      }
+    },
+    [aiTraining, published, pushAlert],
+  );
+
+  /* ---------------- scheduled messages ticker ---------------- */
+  useEffect(() => {
+    const checkSchedule = () => {
+      const now = new Date();
+      const currentClock = now.toLocaleTimeString("he-IL", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setScheduledMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.isActive && msg.time === currentClock && !msg.isTriggered) {
+            pushAlert(`[הודעה מתוזמנת - ${msg.title}]: ${msg.content}`, "info");
+            return { ...msg, isTriggered: true };
+          }
+          return msg;
+        }),
+      );
+    };
+
+    const timer = setInterval(checkSchedule, 20000);
+    return () => clearInterval(timer);
+  }, [pushAlert]);
+
+  /* ---------------- nearest order distance & screensaver trigger ---------------- */
+  const nearestOrderMinutesRemaining = useMemo(() => {
+    const activeOrders = published.filter((o) => o.status === "ממתין" || o.status === "בהעמסה");
+    if (activeOrders.length === 0) return 999; // No immediate order in queue
+
+    const now = new Date();
+    let minMinutes = Number.POSITIVE_INFINITY;
+    for (const o of activeOrders) {
+      const diff = minutesUntil(o.targetTime, now);
+      if (diff >= 0 && diff < minMinutes) {
+        minMinutes = diff;
+      }
+    }
+    return Number.isFinite(minMinutes) ? minMinutes : 999;
+  }, [published]);
+
+  // Idle and gap monitoring
+  useEffect(() => {
+    const onUserAction = () => {
+      lastInteractionTime.current = Date.now();
+    };
+
+    window.addEventListener("mousemove", onUserAction);
+    window.addEventListener("mousedown", onUserAction);
+    window.addEventListener("keydown", onUserAction);
+    window.addEventListener("touchstart", onUserAction);
+    window.addEventListener("wheel", onUserAction);
+
+    return () => {
+      window.removeEventListener("mousemove", onUserAction);
+      window.removeEventListener("mousedown", onUserAction);
+      window.removeEventListener("keydown", onUserAction);
+      window.removeEventListener("touchstart", onUserAction);
+      window.removeEventListener("wheel", onUserAction);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!screensaverSettings.isEnabled) return;
+
+    const interval = setInterval(() => {
+      const idleSec = Math.floor((Date.now() - lastInteractionTime.current) / 1000);
+      setIdleSecondsCount(idleSec);
+
+      // Trigger condition 1: Inactivity timeout reached
+      const isIdleExceeded =
+        screensaverSettings.idleTimeoutSeconds > 0 &&
+        idleSec >= screensaverSettings.idleTimeoutSeconds;
+
+      // Trigger condition 2: Nearest order is far beyond minimum threshold (e.g. > 45 minutes or queue is empty)
+      // and user is idle for at least 15 seconds so as not to interrupt ongoing typing
+      const isOrderGapExceeded =
+        screensaverSettings.minOrderGapMinutes > 0 &&
+        nearestOrderMinutesRemaining !== null &&
+        nearestOrderMinutesRemaining >= screensaverSettings.minOrderGapMinutes &&
+        idleSec >= 15;
+
+      if ((isIdleExceeded || isOrderGapExceeded) && !isScreensaverActive && !isStudioOpen) {
+        setScreensaverActive(true);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [screensaverSettings, nearestOrderMinutesRemaining, isScreensaverActive, isStudioOpen]);
+
   /* ---------------- keyboard shortcuts ---------------- */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -383,12 +748,17 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         setStudioOpen((v) => !v);
       }
       if (e.key === "Escape") {
-        setStudioOpen((v) => !v);
+        if (isScreensaverActive) {
+          setScreensaverActive(false);
+          lastInteractionTime.current = Date.now();
+        } else {
+          setStudioOpen(false);
+        }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [isScreensaverActive]);
 
   /* ---------------- derived ---------------- */
   const focusOrder = useMemo(
@@ -431,6 +801,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     selectOrder: setSelectedOrderId,
     updateOrder,
     setOrderStatus,
+    quickUpdateStatus,
     toggleItemApproval,
     approveAllItems,
     updateItemQuantity,
@@ -445,6 +816,23 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     syncNow,
     focusOrder,
     counts,
+    /* screensaver */
+    isScreensaverActive,
+    setScreensaverActive,
+    screensaverSettings,
+    updateScreensaverSettings,
+    nearestOrderMinutesRemaining,
+    idleSecondsCount,
+    /* AI */
+    aiTraining,
+    updateAITraining,
+    scheduledMessages,
+    addScheduledMessage,
+    toggleScheduledMessage,
+    deleteScheduledMessage,
+    targetedBriefings,
+    generateAIBriefing,
+    isGeneratingAI,
   };
 
   return <DispatchContext.Provider value={value}>{children}</DispatchContext.Provider>;
