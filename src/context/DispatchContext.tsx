@@ -252,7 +252,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
             return [
               {
                 id: key,
-                level: mins <= 15 ? "critical" : "warning",
+                level: (mins <= 15 ? "critical" : "warning") as AlertLevel,
                 message: `נותרו ${mins} דקות ליעד — הזמנה ${order.orderId} ל${order.customerName} (${order.city})`,
                 createdAt: now.toISOString(),
               },
