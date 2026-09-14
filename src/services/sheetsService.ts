@@ -167,7 +167,54 @@ function toNumber(value: string | undefined): number {
 
 function toStatus(value: string | undefined): OrderStatus {
   const v = (value ?? "").trim();
-  return STATUSES.includes(v as OrderStatus) ? (v as OrderStatus) : "ממתין";
+  if (STATUSES.includes(v as OrderStatus)) return v as OrderStatus;
+  if (/סופק|נמסר|הושלם|בוצע/.test(v)) return "סופק";
+  if (/יצא|בדרך|בהפצה|נשלח/.test(v)) return "יצא לדרך";
+  if (/העמסה|נטען|מועמס/.test(v)) return "בהעמסה";
+  return "ממתין";
+}
+
+const HEBREW_NUMBERS: Record<string, number> = {
+  אחד: 1,
+  שני: 2,
+  שתי: 2,
+  שלוש: 3,
+  ארבע: 4,
+  חמש: 5,
+};
+
+/**
+ * ממיר תא "פירוט מוצרים וכמויות" (טקסט חופשי) לרשימת פריטים.
+ * דוגמה: "2 בלות סומסום, 3 בלות חול, 6 שק מלט אפור"
+ */
+export function parseProductList(text: string, orderId = ""): OrderItem[] {
+  if (!text || !text.trim()) return [];
+  return text
+    .split(/[,;\n]|\s\+\s/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map((part, index) => {
+      const leading = part.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+      let quantity = leading ? Number(leading[1]) : 0;
+      let name = leading ? (leading[2] ?? "").trim() : part;
+      if (!leading) {
+        const inner = part.match(/(\d+(?:\.\d+)?)/);
+        if (inner) quantity = Number(inner[1]);
+      }
+      if (!quantity) {
+        const word = Object.keys(HEBREW_NUMBERS).find((w) => part.startsWith(w));
+        if (word) {
+          quantity = HEBREW_NUMBERS[word] ?? 0;
+          name = part.slice(word.length).trim();
+        }
+      }
+      return {
+        sku: `${orderId || "P"}-${index + 1}`,
+        name: name || part,
+        quantity: quantity || 1,
+        isApproved: false,
+      } satisfies OrderItem;
+    });
 }
 
 /**
