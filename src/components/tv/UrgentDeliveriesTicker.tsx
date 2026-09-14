@@ -55,13 +55,13 @@ export interface UrgentItem {
 const SSR_BASELINE_DATE = new Date("2026-09-14T11:00:00.000Z");
 
 function useTickerClock() {
-  const [now, setNow] = useState<Date | null>(null);
+  const [now, setNow] = useState<Date>(() => SSR_BASELINE_DATE);
   useEffect(() => {
     setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-  return now ?? SSR_BASELINE_DATE;
+  return now;
 }
 
 /**
@@ -246,6 +246,7 @@ export function UrgentDeliveriesTicker() {
   if (allUrgentItems.length === 0) {
     return (
       <aside
+        suppressHydrationWarning
         aria-label="מבזק משלוחים דחופים"
         className="flex items-center justify-between rounded-xl border border-border/70 bg-card/70 px-4 py-2 text-xs font-semibold text-muted-foreground backdrop-blur"
       >
@@ -265,6 +266,7 @@ export function UrgentDeliveriesTicker() {
 
   return (
     <section
+      suppressHydrationWarning
       aria-label="מבזק משלוחים דחופים"
       className="relative z-30 flex flex-col rounded-2xl border border-amber-500/30 bg-card/95 shadow-md backdrop-blur-md transition-all"
     >

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
@@ -12,6 +12,8 @@ import {
   Maximize2,
   Navigation,
   Play,
+  Pause,
+  FastForward,
   RotateCw,
   Sparkles,
   Truck,
@@ -31,6 +33,7 @@ import {
 import { useDispatchBoard } from "@/context/DispatchContext";
 import { computeProductAnalytics, getDailyInventoryInsights } from "@/services/analyticsService";
 import { ARTERIAL_ROUTES, calculateDriverETAs } from "@/services/trafficService";
+import { LowStockBadge } from "@/components/inventory/LowStockBadge";
 import { DriveMediaPlayer } from "./DriveMediaPlayer";
 import { InventoryAlertSlide } from "./InventoryAlertSlide";
 import type { ScreensaverMode } from "@/types/screensaver";
@@ -52,6 +55,84 @@ const VIDEO_THEMES = [
   },
 ];
 
+export const SCREENSAVER_MODES: {
+  id: ScreensaverMode;
+  label: string;
+  shortLabel: string;
+  badge: string;
+  category: "alert" | "media" | "ops";
+}[] = [
+  {
+    id: "INVENTORY_ALERT",
+    label: "דוח משיכת מלאי (עמודה H)",
+    shortLabel: "משיכת מלאי חי",
+    badge: "התראת רכש מגרש",
+    category: "alert",
+  },
+  {
+    id: "drive_media",
+    label: "מדיה ומצגות מ-Drive",
+    shortLabel: "מדיה Drive",
+    badge: "הדרכה ווידאו",
+    category: "media",
+  },
+  {
+    id: "STOCK_ALERT",
+    label: "התראות רכש ומלאי מוגבר",
+    shortLabel: "התראות רכש",
+    badge: "מלאי מוגבר",
+    category: "alert",
+  },
+  {
+    id: "video",
+    label: "וידאו לוגיסטיקה ואווירה",
+    shortLabel: "וידאו אווירה",
+    badge: "הפוגה מבצעית",
+    category: "media",
+  },
+  {
+    id: "analytics",
+    label: "מדדי ביצועים ומותגי סבן",
+    shortLabel: "ביצועי סבן",
+    badge: "דשבורד מבצעי",
+    category: "ops",
+  },
+  {
+    id: "traffic",
+    label: "מצב פקקים ו-ETA משאיות",
+    shortLabel: "צירי תנועה",
+    badge: "צי רכבים",
+    category: "ops",
+  },
+];
+
+/**
+ * Standardized pure Framer Motion cross-fade variants for all screensaver slides.
+ * Removes jarring Y jumps or extreme scales to produce smooth cinematic fades.
+ */
+export const screensaverCrossFadeVariants = {
+  initial: {
+    opacity: 0,
+    scale: 0.995,
+  },
+  animate: {
+    opacity: 1,
+    scale: 1,
+    transition: {
+      duration: 0.5,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+  exit: {
+    opacity: 0,
+    scale: 1.005,
+    transition: {
+      duration: 0.35,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
 export function DispatchScreensaver() {
   const {
     isScreensaverActive,
@@ -72,6 +153,8 @@ export function DispatchScreensaver() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [currentTime, setCurrentTime] = useState<string>("");
   const [currentDate, setCurrentDate] = useState<string>("");
+  const [isCyclePaused, setIsCyclePaused] = useState(false);
+  const [cycleProgress, setCycleProgress] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Live clock
@@ -106,35 +189,57 @@ export function DispatchScreensaver() {
   // Active inventory insight index when on STOCK_ALERT slide
   const [activeStockIndex, setActiveStockIndex] = useState(0);
 
-  // Auto-cycle through views if enabled
-  useEffect(() => {
-    if (!isScreensaverActive || !screensaverSettings.autoCycle) return;
-    // Include INVENTORY_ALERT, STOCK_ALERT and drive_media in cycle
-    const modes: ScreensaverMode[] = [
-      "INVENTORY_ALERT",
-      "analytics",
-      "STOCK_ALERT",
-      "drive_media",
-      "traffic",
-      "video",
-    ];
-    const id = setInterval(
-      () => {
-        setActiveTab((prev) => {
-          const nextIdx = (modes.indexOf(prev) + 1) % modes.length;
-          return modes[nextIdx] ?? "INVENTORY_ALERT";
-        });
-      },
-      (screensaverSettings.cycleIntervalSeconds || 12) * 1000,
-    );
+  const cycleDurationSec = screensaverSettings.cycleIntervalSeconds || 14;
 
-    return () => clearInterval(id);
-  }, [
-    isScreensaverActive,
-    screensaverSettings.autoCycle,
-    screensaverSettings.cycleIntervalSeconds,
-    inventoryInsights.length,
-  ]);
+  // Handler to switch tabs and reset the progress bar
+  const handleSelectTab = useCallback((mode: ScreensaverMode) => {
+    setActiveTab(mode);
+    setCycleProgress(0);
+  }, []);
+
+  // Handler to trigger next slide immediately
+  const handleNextSlide = useCallback(() => {
+    setActiveTab((currTab) => {
+      const currentIdx = SCREENSAVER_MODES.findIndex((m) => m.id === currTab);
+      const nextIdx = (currentIdx + 1) % SCREENSAVER_MODES.length;
+      return SCREENSAVER_MODES[nextIdx].id;
+    });
+    setCycleProgress(0);
+  }, []);
+
+  // Auto-cycle through views with smooth progress tracking
+  useEffect(() => {
+    if (!isScreensaverActive || !screensaverSettings.autoCycle || isCyclePaused) return;
+
+    const intervalMs = 150;
+    const stepIncrement = (intervalMs / (cycleDurationSec * 1000)) * 100;
+
+    const timer = setInterval(() => {
+      setCycleProgress((prev) => {
+        if (prev + stepIncrement >= 100) {
+          // Switch to next tab smoothly
+          setActiveTab((currTab) => {
+            const currentIdx = SCREENSAVER_MODES.findIndex((m) => m.id === currTab);
+            const nextIdx = (currentIdx + 1) % SCREENSAVER_MODES.length;
+            return SCREENSAVER_MODES[nextIdx].id;
+          });
+          return 0;
+        }
+        return prev + stepIncrement;
+      });
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [isScreensaverActive, screensaverSettings.autoCycle, isCyclePaused, cycleDurationSec]);
+
+  // Auto-advance products within STOCK_ALERT every 7 seconds
+  useEffect(() => {
+    if (activeTab !== "STOCK_ALERT" || inventoryInsights.length <= 1 || isCyclePaused) return;
+    const timer = setInterval(() => {
+      setActiveStockIndex((prev) => (prev + 1) % inventoryInsights.length);
+    }, 7000);
+    return () => clearInterval(timer);
+  }, [activeTab, inventoryInsights.length, isCyclePaused]);
 
   // Video play state sync
   useEffect(() => {
@@ -631,18 +736,23 @@ export function DispatchScreensaver() {
                               </div>
                             </div>
 
-                            <span
-                              className={cn(
-                                "rounded-full px-4 py-1 text-xs font-black ring-1",
-                                currentInsight.alertLevel === "HIGH"
-                                  ? "bg-red-500/20 text-red-400 ring-red-500/40 animate-pulse"
-                                  : "bg-amber-500/20 text-amber-300 ring-amber-500/40",
+                            <div className="flex items-center gap-2">
+                              {currentInsight.alertLevel === "HIGH" && (
+                                <LowStockBadge urgency="critical" size="sm" className="shadow-md" />
                               )}
-                            >
-                              {currentInsight.alertLevel === "HIGH"
-                                ? "דרישת רכש דחופה"
-                                : "ניטור פעיל"}
-                            </span>
+                              <span
+                                className={cn(
+                                  "rounded-full px-4 py-1 text-xs font-black ring-1",
+                                  currentInsight.alertLevel === "HIGH"
+                                    ? "bg-red-500/20 text-red-400 ring-red-500/40 animate-pulse"
+                                    : "bg-amber-500/20 text-amber-300 ring-amber-500/40",
+                                )}
+                              >
+                                {currentInsight.alertLevel === "HIGH"
+                                  ? "דרישת רכש דחופה"
+                                  : "ניטור פעיל"}
+                              </span>
+                            </div>
                           </div>
 
                           {/* SKU & Official Product Name */}

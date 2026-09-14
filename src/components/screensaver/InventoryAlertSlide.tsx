@@ -11,9 +11,11 @@ import {
   Sparkles,
   CheckCircle2,
   RefreshCw,
+  TrendingDown,
 } from "lucide-react";
 import type { Order } from "@/types/dispatch";
 import { aggregateTodayDispensedInventory } from "@/services/analyticsService";
+import { LowStockBadge } from "@/components/inventory/LowStockBadge";
 import { cn } from "@/lib/utils";
 
 interface InventoryAlertSlideProps {
@@ -21,6 +23,35 @@ interface InventoryAlertSlideProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }
+
+const slideContainerVariants = {
+  initial: { opacity: 0, scale: 0.99 },
+  animate: {
+    opacity: 1,
+    scale: 1,
+    transition: {
+      duration: 0.5,
+      ease: [0.22, 1, 0.36, 1],
+      staggerChildren: 0.08,
+      delayChildren: 0.05,
+    },
+  },
+  exit: {
+    opacity: 0,
+    scale: 1.01,
+    transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
+  },
+};
+
+const cardItemVariants = {
+  initial: { opacity: 0, y: 14, scale: 0.98 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+  },
+};
 
 export function InventoryAlertSlide({
   orders,
@@ -44,7 +75,13 @@ export function InventoryAlertSlide({
   }, [summary]);
 
   return (
-    <div className="h-full flex flex-col justify-between gap-6 max-w-7xl mx-auto py-2">
+    <motion.div
+      variants={slideContainerVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className="h-full flex flex-col justify-between gap-6 max-w-7xl mx-auto py-2"
+    >
       {/* 1. Header Banner */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div className="flex items-center gap-3">
@@ -96,31 +133,39 @@ export function InventoryAlertSlide({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 flex-1 items-stretch">
         {/* Card 1: מלט וצמנט (Cement) */}
         <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          variants={cardItemVariants}
           className={cn(
-            "relative overflow-hidden rounded-3xl p-6 flex flex-col justify-between border shadow-2xl backdrop-blur-md",
-            summary.isCementHighDemand
-              ? "bg-gradient-to-b from-slate-900 via-slate-900 to-rose-950/40 border-rose-500/50 shadow-rose-950/40"
-              : "bg-slate-900/90 border-slate-800",
+            "relative overflow-hidden rounded-3xl p-6 flex flex-col justify-between border shadow-2xl backdrop-blur-md transition-all",
+            summary.isCementLowStock
+              ? "bg-gradient-to-b from-slate-900 via-slate-900 to-rose-950/50 border-rose-500/60 shadow-rose-950/50 ring-1 ring-rose-500/40"
+              : summary.isCementHighDemand
+                ? "bg-gradient-to-b from-slate-900 via-slate-900 to-amber-950/40 border-amber-500/50 shadow-amber-950/40"
+                : "bg-slate-900/90 border-slate-800",
           )}
         >
           {/* Top Title & Status */}
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
               <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Boxes className="size-4 text-amber-400" />
                 <span>מלט וצמנט פורטלנד</span>
               </span>
-              {summary.isCementHighDemand ? (
-                <span className="flex items-center gap-1 rounded-full bg-rose-500/20 px-2.5 py-0.5 text-[11px] font-black text-rose-400 ring-1 ring-rose-500/40 animate-pulse">
-                  <Flame className="size-3 text-rose-400" />
+              {summary.isCementLowStock ? (
+                <LowStockBadge
+                  currentStock={summary.cementCurrentStock}
+                  safetyStockLevel={summary.cementSafetyStock}
+                  unit="שק"
+                  size="sm"
+                  urgency="critical"
+                />
+              ) : summary.isCementHighDemand ? (
+                <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[11px] font-black text-amber-400 ring-1 ring-amber-500/40 animate-pulse">
+                  <Flame className="size-3 text-amber-400" />
                   <span>קצב משיכה גבוה 🔥</span>
                 </span>
               ) : (
                 <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400 ring-1 ring-emerald-500/30">
-                  צריכה שגרתית
+                  מלאי תקין
                 </span>
               )}
             </div>
@@ -136,6 +181,32 @@ export function InventoryAlertSlide({
                   {summary.cementPallets} משטחים
                 </span>
                 <span className="text-slate-400">לפי 40 שק/משטח</span>
+              </div>
+            </div>
+
+            {/* Safety Stock Health Indicator */}
+            <div className="mt-2 p-2 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">נותרו במגרש:</span>
+                <span
+                  className={cn(
+                    "font-mono font-black",
+                    summary.isCementLowStock ? "text-rose-400 animate-pulse" : "text-emerald-400",
+                  )}
+                >
+                  {summary.cementCurrentStock} / {summary.cementSafetyStock} שק סף ביטחון
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full transition-all",
+                    summary.isCementLowStock ? "bg-rose-500" : "bg-emerald-500",
+                  )}
+                  style={{
+                    width: `${Math.min(100, (summary.cementCurrentStock / 120) * 100)}%`,
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -154,23 +225,31 @@ export function InventoryAlertSlide({
 
         {/* Card 2: שקים גדולים / בלות (Big Bags) */}
         <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.08 }}
+          variants={cardItemVariants}
           className={cn(
-            "relative overflow-hidden rounded-3xl p-6 flex flex-col justify-between border shadow-2xl backdrop-blur-md",
-            summary.isBigBagsQuarryAlert
-              ? "bg-gradient-to-b from-slate-900 via-slate-900 to-cyan-950/40 border-cyan-500/50 shadow-cyan-950/40"
-              : "bg-slate-900/90 border-slate-800",
+            "relative overflow-hidden rounded-3xl p-6 flex flex-col justify-between border shadow-2xl backdrop-blur-md transition-all",
+            summary.isBigBagsLowStock
+              ? "bg-gradient-to-b from-slate-900 via-slate-900 to-rose-950/50 border-rose-500/60 shadow-rose-950/50 ring-1 ring-rose-500/40"
+              : summary.isBigBagsQuarryAlert
+                ? "bg-gradient-to-b from-slate-900 via-slate-900 to-cyan-950/40 border-cyan-500/50 shadow-cyan-950/40"
+                : "bg-slate-900/90 border-slate-800",
           )}
         >
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
               <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Package className="size-4 text-cyan-400" />
                 <span>שקים גדולים / בלות</span>
               </span>
-              {summary.isBigBagsQuarryAlert ? (
+              {summary.isBigBagsLowStock ? (
+                <LowStockBadge
+                  currentStock={summary.bigBagsCurrentStock}
+                  safetyStockLevel={summary.bigBagsSafetyStock}
+                  unit="בלות"
+                  size="sm"
+                  urgency="critical"
+                />
+              ) : summary.isBigBagsQuarryAlert ? (
                 <span className="flex items-center gap-1 rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-[11px] font-black text-cyan-300 ring-1 ring-cyan-500/40 animate-pulse">
                   <AlertTriangle className="size-3" />
                   <span>התראת מחצבה 🚜</span>
@@ -190,15 +269,42 @@ export function InventoryAlertSlide({
 
               {/* Breakdown */}
               <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-semibold">
-                <span className="rounded-lg bg-slate-800 px-2 py-0.5 text-slate-200">
-                  סומסום: <b className="text-cyan-300">{summary.bigBagsBreakdown.sesame}</b>
+                <span className="rounded-lg bg-slate-800 px-2 py-0.5 text-slate-200 flex items-center gap-1">
+                  <span>סומסום:</span>{" "}
+                  <b className="text-cyan-300">{summary.bigBagsBreakdown.sesame}</b>
                 </span>
-                <span className="rounded-lg bg-slate-800 px-2 py-0.5 text-slate-200">
-                  חול: <b className="text-cyan-300">{summary.bigBagsBreakdown.sand}</b>
+                <span className="rounded-lg bg-slate-800 px-2 py-0.5 text-slate-200 flex items-center gap-1">
+                  <span>חול:</span> <b className="text-cyan-300">{summary.bigBagsBreakdown.sand}</b>
                 </span>
-                <span className="rounded-lg bg-slate-800 px-2 py-0.5 text-slate-200">
-                  טיט: <b className="text-cyan-300">{summary.bigBagsBreakdown.tit}</b>
+                <span className="rounded-lg bg-slate-800 px-2 py-0.5 text-slate-200 flex items-center gap-1">
+                  <span>טיט:</span> <b className="text-cyan-300">{summary.bigBagsBreakdown.tit}</b>
                 </span>
+              </div>
+            </div>
+
+            {/* Safety Stock Health Indicator */}
+            <div className="mt-2 p-2 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">נותרו במגרש:</span>
+                <span
+                  className={cn(
+                    "font-mono font-black",
+                    summary.isBigBagsLowStock ? "text-rose-400 animate-pulse" : "text-emerald-400",
+                  )}
+                >
+                  {summary.bigBagsCurrentStock} / {summary.bigBagsSafetyStock} בלות סף
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full transition-all",
+                    summary.isBigBagsLowStock ? "bg-rose-500" : "bg-cyan-500",
+                  )}
+                  style={{
+                    width: `${Math.min(100, (summary.bigBagsCurrentStock / 40) * 100)}%`,
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -216,20 +322,33 @@ export function InventoryAlertSlide({
 
         {/* Card 3: בלוקים ולוחות (Blocks & Boards) */}
         <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.16 }}
-          className="relative overflow-hidden rounded-3xl p-6 flex flex-col justify-between border border-indigo-500/40 bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950/30 shadow-2xl backdrop-blur-md"
+          variants={cardItemVariants}
+          className={cn(
+            "relative overflow-hidden rounded-3xl p-6 flex flex-col justify-between border shadow-2xl backdrop-blur-md transition-all",
+            summary.isBlocksLowStock
+              ? "border-rose-500/60 bg-gradient-to-b from-slate-900 via-slate-900 to-rose-950/50 shadow-rose-950/50 ring-1 ring-rose-500/40"
+              : "border-indigo-500/40 bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950/30",
+          )}
         >
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
               <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Layers className="size-4 text-indigo-400" />
                 <span>בלוקים ולוחות</span>
               </span>
-              <span className="rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-[11px] font-black text-indigo-300 ring-1 ring-indigo-500/30">
-                מחסן 4
-              </span>
+              {summary.isBlocksLowStock ? (
+                <LowStockBadge
+                  currentStock={summary.blocksCurrentStock}
+                  safetyStockLevel={summary.blocksSafetyStock}
+                  unit="יח'"
+                  size="sm"
+                  urgency="critical"
+                />
+              ) : (
+                <span className="rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-[11px] font-black text-indigo-300 ring-1 ring-indigo-500/30">
+                  מחסן 4
+                </span>
+              )}
             </div>
 
             <div className="my-3">
@@ -242,6 +361,21 @@ export function InventoryAlertSlide({
                   {summary.blockPallets} משטחים
                 </span>
                 <span className="text-slate-400">בלוק 20, 10, 7 ולוחות</span>
+              </div>
+            </div>
+
+            {/* Safety Stock Health Indicator */}
+            <div className="mt-2 p-2 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">נותרו במגרש:</span>
+                <span
+                  className={cn(
+                    "font-mono font-black",
+                    summary.isBlocksLowStock ? "text-rose-400 animate-pulse" : "text-indigo-300",
+                  )}
+                >
+                  {summary.blocksCurrentStock} / {summary.blocksSafetyStock} יח' סף
+                </span>
               </div>
             </div>
 
@@ -271,20 +405,33 @@ export function InventoryAlertSlide({
 
         {/* Card 4: תערובות יבשות, טיח ודבקים (Dry-Mix & Adhesives) */}
         <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.24 }}
-          className="relative overflow-hidden rounded-3xl p-6 flex flex-col justify-between border border-fuchsia-500/40 bg-gradient-to-b from-slate-900 via-slate-900 to-fuchsia-950/30 shadow-2xl backdrop-blur-md"
+          variants={cardItemVariants}
+          className={cn(
+            "relative overflow-hidden rounded-3xl p-6 flex flex-col justify-between border shadow-2xl backdrop-blur-md transition-all",
+            summary.isDryMixLowStock
+              ? "border-rose-500/60 bg-gradient-to-b from-slate-900 via-slate-900 to-rose-950/50 shadow-rose-950/50 ring-1 ring-rose-500/40"
+              : "border-fuchsia-500/40 bg-gradient-to-b from-slate-900 via-slate-900 to-fuchsia-950/30",
+          )}
         >
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
               <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Sparkles className="size-4 text-fuchsia-400" />
                 <span>תערובות, טיח ודבק</span>
               </span>
-              <span className="rounded-full bg-fuchsia-500/20 px-2.5 py-0.5 text-[11px] font-black text-fuchsia-300 ring-1 ring-fuchsia-500/30">
-                שקים ופחים
-              </span>
+              {summary.isDryMixLowStock ? (
+                <LowStockBadge
+                  currentStock={summary.dryMixCurrentStock}
+                  safetyStockLevel={summary.dryMixSafetyStock}
+                  unit="שק"
+                  size="sm"
+                  urgency="critical"
+                />
+              ) : (
+                <span className="rounded-full bg-fuchsia-500/20 px-2.5 py-0.5 text-[11px] font-black text-fuchsia-300 ring-1 ring-fuchsia-500/30">
+                  שקים ופחים
+                </span>
+              )}
             </div>
 
             <div className="my-3">
@@ -294,6 +441,21 @@ export function InventoryAlertSlide({
               </div>
               <div className="mt-1 text-xs font-semibold text-slate-400">
                 ריצופית, פלסטומר, טיט, טיח גבס
+              </div>
+            </div>
+
+            {/* Safety Stock Health Indicator */}
+            <div className="mt-2 p-2 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">נותרו במגרש:</span>
+                <span
+                  className={cn(
+                    "font-mono font-black",
+                    summary.isDryMixLowStock ? "text-rose-400 animate-pulse" : "text-fuchsia-300",
+                  )}
+                >
+                  {summary.dryMixCurrentStock} / {summary.dryMixSafetyStock} שק סף
+                </span>
               </div>
             </div>
 
@@ -324,9 +486,7 @@ export function InventoryAlertSlide({
 
       {/* 3. Action Footer: Reminder for Oren and Direct Reorder Trigger */}
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.3 }}
+        variants={cardItemVariants}
         className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/50 via-slate-900 to-slate-900 p-4 shadow-xl backdrop-blur-md flex flex-wrap items-center justify-between gap-4"
       >
         <div className="flex items-center gap-3">
@@ -355,6 +515,6 @@ export function InventoryAlertSlide({
           </a>
         </div>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

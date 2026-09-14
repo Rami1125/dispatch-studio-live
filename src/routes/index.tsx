@@ -58,23 +58,33 @@ function RoundSection({ round, orders }: { round: number; orders: Order[] }) {
 function LiveBoard() {
   const { published, focusOrder } = useDispatchBoard();
 
-  const [viewMode, setViewMode] = useState<"tv" | "picker">(() => {
+  const [viewMode, setViewMode] = useState<"tv" | "picker">("tv");
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const modeParam = urlParams.get("mode");
       const pickerParam = urlParams.get("picker");
       if (modeParam === "picker" || pickerParam === "oren" || pickerParam === "tamir") {
-        return "picker";
+        setViewMode("picker");
+        return;
       }
-      if (modeParam === "tv") return "tv";
+      if (modeParam === "tv") {
+        setViewMode("tv");
+        return;
+      }
 
       const saved = localStorage.getItem("saban_view_mode");
-      if (saved === "picker" || saved === "tv") return saved;
+      if (saved === "picker" || saved === "tv") {
+        setViewMode(saved);
+        return;
+      }
 
-      if (window.innerWidth < 768) return "picker";
+      if (window.innerWidth < 768) {
+        setViewMode("picker");
+      }
     }
-    return "tv";
-  });
+  }, []);
 
   const handleSetViewMode = (mode: "tv" | "picker") => {
     setViewMode(mode);

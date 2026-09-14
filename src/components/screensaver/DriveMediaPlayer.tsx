@@ -480,57 +480,79 @@ export function DriveMediaPlayer({ onActivity }: DriveMediaPlayerProps) {
 
           {/* PLAYER DISPLAY CONTAINER */}
           <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden min-h-[360px]">
-            {currentItem?.type === "video" ? (
-              // VIDEO PLAYER
-              <div className="relative h-full w-full flex items-center justify-center">
-                {currentItem.downloadUrl ? (
-                  <video
-                    ref={videoRef}
-                    key={currentItem.id}
-                    src={currentItem.downloadUrl}
-                    autoPlay
-                    loop={loopVideo}
-                    muted={isMuted}
-                    playsInline
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  // Google Drive Preview Iframe
+            <AnimatePresence mode="wait">
+              {currentItem?.type === "video" ? (
+                // VIDEO PLAYER
+                <motion.div
+                  key={`video-${currentItem.id}`}
+                  initial={{ opacity: 0, scale: 0.995 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.005 }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  className="relative h-full w-full flex items-center justify-center"
+                >
+                  {currentItem.downloadUrl ? (
+                    <video
+                      ref={videoRef}
+                      key={currentItem.id}
+                      src={currentItem.downloadUrl}
+                      autoPlay
+                      loop={loopVideo}
+                      muted={isMuted}
+                      playsInline
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    // Google Drive Preview Iframe
+                    <iframe
+                      src={currentItem.embedUrl}
+                      title={currentItem.name}
+                      className="h-full w-full border-0"
+                      allow="autoplay; encrypted-media; fullscreen"
+                    />
+                  )}
+                </motion.div>
+              ) : currentItem?.type === "presentation" ? (
+                // PRESENTATION PLAYER
+                <motion.div
+                  key={`pres-${currentItem.id}-${slideRefreshKey}`}
+                  initial={{ opacity: 0, scale: 0.995 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.005 }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  className="relative h-full w-full flex flex-col bg-slate-950"
+                >
                   <iframe
+                    key={`${currentItem.id}-${slideRefreshKey}`}
                     src={currentItem.embedUrl}
                     title={currentItem.name}
-                    className="h-full w-full border-0"
-                    allow="autoplay; encrypted-media; fullscreen"
+                    className="h-full w-full border-0 flex-1"
+                    allow="fullscreen"
                   />
-                )}
-              </div>
-            ) : currentItem?.type === "presentation" ? (
-              // PRESENTATION PLAYER
-              <div className="relative h-full w-full flex flex-col bg-slate-950">
-                <iframe
-                  key={`${currentItem.id}-${slideRefreshKey}`}
-                  src={currentItem.embedUrl}
-                  title={currentItem.name}
-                  className="h-full w-full border-0 flex-1"
-                  allow="fullscreen"
-                />
 
-                {/* Visual Auto-Advance Progress Bar for Presentation */}
-                {isSlideAutoPlaying && (
-                  <div className="h-1.5 w-full bg-slate-800 overflow-hidden">
-                    <motion.div
-                      className="h-full bg-gradient-to-r from-amber-500 to-amber-300"
-                      style={{ width: `${slideProgress}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center p-8 text-slate-400">
-                <Folder className="size-12 mx-auto mb-3 text-slate-600" />
-                <p>אנא בחר קובץ להצגה</p>
-              </div>
-            )}
+                  {/* Visual Auto-Advance Progress Bar for Presentation */}
+                  {isSlideAutoPlaying && (
+                    <div className="h-1.5 w-full bg-slate-800 overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-to-r from-amber-500 to-amber-300"
+                        style={{ width: `${slideProgress}%` }}
+                      />
+                    </div>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="empty-state"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="text-center p-8 text-slate-400"
+                >
+                  <Folder className="size-12 mx-auto mb-3 text-slate-600" />
+                  <p>אנא בחר קובץ להצגה</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* DEDICATED PLAYER TOOLS TOOLBAR */}

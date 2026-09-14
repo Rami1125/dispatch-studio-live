@@ -2,9 +2,229 @@ import type { Order } from "@/types/dispatch";
 import type {
   DailyInventoryInsight,
   InventoryAggregationSummary,
+  ItemStockStatus,
   ParsedProductItem,
   ProductAnalyticsSummary,
 } from "@/types/screensaver";
+
+export interface SafetyStockRule {
+  sku?: string;
+  namePatterns: string[];
+  productName: string;
+  category: "cement" | "big_bag" | "block" | "dry_mix" | "other";
+  initialStock: number;
+  safetyStockLevel: number;
+  unit: string;
+}
+
+/**
+ * Predefined baseline yard safety stock levels for H. Saban materials.
+ * When daily consumption pulls stock below safetyStockLevel, a pulsating alert badge is triggered.
+ */
+export const PREDEFINED_SAFETY_STOCKS: SafetyStockRule[] = [
+  {
+    sku: "10002",
+    namePatterns: ["מלט אפור", "מלט 25", "נשר פורטלנד", "מלט"],
+    productName: 'מלט אפור 25 ק"ג נשר',
+    category: "cement",
+    initialStock: 200, // 5 pallets baseline in yard
+    safetyStockLevel: 80, // 2 full pallets minimum safety reserve
+    unit: "שק",
+  },
+  {
+    sku: "11511",
+    namePatterns: ["סומסום", "שומשום"],
+    productName: "סומסום שק גדול (בלה)",
+    category: "big_bag",
+    initialStock: 24,
+    safetyStockLevel: 10,
+    unit: "בלות",
+  },
+  {
+    sku: "11501",
+    namePatterns: ["חול מחצבה", "חול ים", "חול בלה", "חול"],
+    productName: "חול בלה מנופה",
+    category: "big_bag",
+    initialStock: 20,
+    safetyStockLevel: 8,
+    unit: "בלות",
+  },
+  {
+    sku: "11551",
+    namePatterns: ["טיט בלה", "טיט שק גדול", "טיט שק", "טיט"],
+    productName: "טיט יבש מוכן לריצוף (בלה/שק)",
+    category: "big_bag",
+    initialStock: 25,
+    safetyStockLevel: 10,
+    unit: "יח'",
+  },
+  {
+    sku: "18094",
+    namePatterns: ["בלוק 20", "איטונג 20"],
+    productName: "בלוק בטון / איטונג 20",
+    category: "block",
+    initialStock: 350,
+    safetyStockLevel: 120,
+    unit: "יח'",
+  },
+  {
+    sku: "18095",
+    namePatterns: ["בלוק 10", "איטונג 10"],
+    productName: "בלוק מחיצה 10",
+    category: "block",
+    initialStock: 250,
+    safetyStockLevel: 120,
+    unit: "יח'",
+  },
+  {
+    namePatterns: ["בלוק 7"],
+    productName: "בלוק 7",
+    category: "block",
+    initialStock: 200,
+    safetyStockLevel: 80,
+    unit: "יח'",
+  },
+  {
+    sku: "60088",
+    namePatterns: ["ריצופית", "ריצופית אפור"],
+    productName: "דבק ריצופית אפור",
+    category: "dry_mix",
+    initialStock: 100,
+    safetyStockLevel: 40,
+    unit: "שק",
+  },
+  {
+    sku: "60089",
+    namePatterns: ["פלסטומר", "פלסטומר 603"],
+    productName: "דבק פלסטומר 603",
+    category: "dry_mix",
+    initialStock: 50,
+    safetyStockLevel: 25,
+    unit: "שק",
+  },
+  {
+    namePatterns: ["mp75", "טיח גבס", "טיח"],
+    productName: "טיח גבס MP75",
+    category: "dry_mix",
+    initialStock: 40,
+    safetyStockLevel: 15,
+    unit: "שק",
+  },
+  {
+    sku: "19001",
+    namePatterns: ["לוח עץ פיני", "לוח עץ"],
+    productName: "לוח עץ פיני 3 מטר",
+    category: "block",
+    initialStock: 60,
+    safetyStockLevel: 30,
+    unit: "לוח",
+  },
+  {
+    sku: "19002",
+    namePatterns: ["מייק 10", "מייק"],
+    productName: "מייק 10",
+    category: "other",
+    initialStock: 80,
+    safetyStockLevel: 40,
+    unit: "יח'",
+  },
+  {
+    sku: "19003",
+    namePatterns: ["איסכורית"],
+    productName: "איסכורית 2 מטר",
+    category: "block",
+    initialStock: 25,
+    safetyStockLevel: 12,
+    unit: "לוח",
+  },
+  {
+    sku: "11600",
+    namePatterns: ["פוליגג"],
+    productName: "פוליגג משוריין 20 ק״ג",
+    category: "dry_mix",
+    initialStock: 15,
+    safetyStockLevel: 6,
+    unit: "פח",
+  },
+];
+
+/**
+ * Finds a matching safety stock rule by product name or SKU.
+ */
+export function findSafetyStockRule(name: string, sku?: string): SafetyStockRule | null {
+  const cleanName = (name || "").toLowerCase();
+  const cleanSku = (sku || "").trim();
+
+  // 1. Direct SKU match
+  if (cleanSku) {
+    const bySku = PREDEFINED_SAFETY_STOCKS.find((r) => r.sku === cleanSku);
+    if (bySku) return bySku;
+  }
+
+  // 2. Name pattern match
+  for (const rule of PREDEFINED_SAFETY_STOCKS) {
+    for (const pattern of rule.namePatterns) {
+      if (cleanName.includes(pattern.toLowerCase())) {
+        return rule;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Evaluates whether a specific item falls below its predefined safety stock level
+ * given its current total dispensed quantity.
+ */
+export function evaluateItemStock(item: {
+  name: string;
+  quantity: number;
+  sku?: string;
+  unit?: string;
+}): ItemStockStatus {
+  const rule = findSafetyStockRule(item.name, item.sku);
+  const category = rule ? rule.category : categorizeProduct(item.name, item.name);
+  const unit = rule ? rule.unit : item.unit || extractUnit(item.name, category);
+  const sku = item.sku || (rule?.sku ?? "כללי");
+
+  // If rule exists, use predefined values; otherwise generate a proportional baseline
+  const initialStock = rule ? rule.initialStock : Math.max(10, Math.ceil(item.quantity * 1.5));
+  const safetyStockLevel = rule
+    ? rule.safetyStockLevel
+    : Math.max(2, Math.ceil(initialStock * 0.4));
+  const currentStock = Math.max(0, initialStock - item.quantity);
+  const isLowStock = currentStock <= safetyStockLevel;
+  const deficit = Math.max(0, safetyStockLevel - currentStock);
+  const stockPercentage = Math.round((currentStock / (initialStock || 1)) * 100);
+
+  const urgency: ItemStockStatus["urgency"] =
+    currentStock <= Math.floor(safetyStockLevel * 0.5)
+      ? "critical"
+      : isLowStock
+        ? "warning"
+        : "normal";
+
+  const reorderAdvice = isLowStock
+    ? `ירד מתחת לסף ביטחון (${currentStock}/${safetyStockLevel} ${unit}). נדרשת הזמנה דחופה של לפחות ${deficit + Math.ceil(safetyStockLevel * 0.5)} ${unit}.`
+    : `מלאי רצפה תקין (${currentStock}/${initialStock} ${unit}).`;
+
+  return {
+    sku,
+    name: rule ? rule.productName : item.name,
+    unit,
+    category,
+    initialStock,
+    dispensedToday: item.quantity,
+    currentStock,
+    safetyStockLevel,
+    isLowStock,
+    deficit,
+    stockPercentage,
+    urgency,
+    reorderAdvice,
+  };
+}
 
 /**
  * Robust parser for Column H ("פירוט מוצרים וכמויות" / `itemsFormatted`).
@@ -178,6 +398,12 @@ export function aggregateTodayDispensedInventory(orders: Order[]): InventoryAggr
   let totalDryMixBags = 0;
   const dryMixBreakdown: Record<string, number> = {};
 
+  // Track individual parsed item totals across orders for granular safety stock evaluation
+  const itemTotalsMap = new Map<
+    string,
+    { name: string; quantity: number; sku?: string; unit?: string }
+  >();
+
   for (const order of relevantOrders) {
     let itemsToProcess: ParsedProductItem[] = [];
 
@@ -198,6 +424,20 @@ export function aggregateTodayDispensedInventory(orders: Order[]): InventoryAggr
     }
 
     for (const item of itemsToProcess) {
+      // Key for item grouping
+      const groupKey = (item.sku || item.name).trim().toLowerCase();
+      const existing = itemTotalsMap.get(groupKey);
+      if (existing) {
+        existing.quantity += item.quantity;
+      } else {
+        itemTotalsMap.set(groupKey, {
+          name: item.name,
+          quantity: item.quantity,
+          sku: item.sku,
+          unit: item.unit,
+        });
+      }
+
       if (item.category === "cement") {
         totalCementBags += item.quantity;
       } else if (item.category === "big_bag") {
@@ -230,34 +470,99 @@ export function aggregateTodayDispensedInventory(orders: Order[]): InventoryAggr
   // Blocks: ~75 blocks per standard pallet
   const blockPallets = Math.round((totalBlocks / 75) * 10) / 10;
 
-  // Threshold alerts:
-  // Cement >= 80 bags -> HIGH_DEMAND
-  // Big bags >= 6 -> QUARRY_REORDER
-  const isCementHighDemand = totalCementBags >= 80;
-  const recommendedCementPallets = Math.max(1, Math.ceil(totalCementBags / 40));
-  const cementReorderRecommendation = isCementHighDemand
-    ? `מומלץ להזמין מנתנאל: ${recommendedCementPallets} משטחים (${recommendedCementPallets * 40} שק)`
-    : "קצב משיכת מלט מאוזן — מלאי רצפה תקין";
+  // Predefined Safety Stock baselines & evaluations:
+  // Cement: 200 initial bags (5 pallets), safety threshold = 80 bags (2 pallets)
+  const cementInitialStock = 200;
+  const cementSafetyStock = 80;
+  const cementCurrentStock = Math.max(0, cementInitialStock - totalCementBags);
+  const isCementLowStock = cementCurrentStock <= cementSafetyStock;
 
-  const isBigBagsQuarryAlert = totalBigBags >= 6;
-  const bigBagsReorderRecommendation = isBigBagsQuarryAlert
-    ? "לתאם פול-טריילר מהמחצבה 🚜"
-    : "קצב משיכת בלות שגרתי";
+  // Big Bags: 45 initial bags, safety threshold = 18 bags
+  const bigBagsInitialStock = 45;
+  const bigBagsSafetyStock = 18;
+  const bigBagsCurrentStock = Math.max(0, bigBagsInitialStock - totalBigBags);
+  const isBigBagsLowStock =
+    bigBagsCurrentStock <= bigBagsSafetyStock ||
+    bigBagsBreakdown.sesame >= 14 ||
+    bigBagsBreakdown.sand >= 12;
+
+  // Blocks: 600 initial blocks, safety threshold = 240 blocks
+  const blocksInitialStock = 600;
+  const blocksSafetyStock = 240;
+  const blocksCurrentStock = Math.max(0, blocksInitialStock - totalBlocks);
+  const isBlocksLowStock =
+    blocksCurrentStock <= blocksSafetyStock ||
+    (blocksBreakdown["בלוק 20"] || 0) >= 150 ||
+    (blocksBreakdown["בלוק 10"] || 0) >= 120;
+
+  // Dry Mix: 190 initial bags, safety threshold = 80 bags
+  const dryMixInitialStock = 190;
+  const dryMixSafetyStock = 80;
+  const dryMixCurrentStock = Math.max(0, dryMixInitialStock - totalDryMixBags);
+  const isDryMixLowStock =
+    dryMixCurrentStock <= dryMixSafetyStock ||
+    (dryMixBreakdown["ריצופית אפור"] || 0) >= 40 ||
+    (dryMixBreakdown["פלסטומר 603"] || 0) >= 25;
+
+  // Granular Item Stock Statuses
+  const itemStockStatuses: ItemStockStatus[] = Array.from(itemTotalsMap.values()).map((item) =>
+    evaluateItemStock(item),
+  );
+  const lowStockItems = itemStockStatuses.filter((i) => i.isLowStock);
+
+  // Threshold alerts & reorder recommendations
+  const isCementHighDemand = totalCementBags >= 80 || isCementLowStock;
+  const recommendedCementPallets = Math.max(1, Math.ceil(totalCementBags / 40));
+  const cementReorderRecommendation = isCementLowStock
+    ? `🚨 מלאי נמוך (נותרו ${cementCurrentStock} שק מתחת לסף ${cementSafetyStock})! מומלץ להזמין מנתנאל: ${recommendedCementPallets} משטחים (${recommendedCementPallets * 40} שק)`
+    : isCementHighDemand
+      ? `קצב משיכה גבוה: מומלץ להזמין מנתנאל ${recommendedCementPallets} משטחים (${recommendedCementPallets * 40} שק)`
+      : "קצב משיכת מלט מאוזן — מלאי רצפה תקין";
+
+  const isBigBagsQuarryAlert = totalBigBags >= 6 || isBigBagsLowStock;
+  const bigBagsReorderRecommendation = isBigBagsLowStock
+    ? `🚨 מלאי בלות ירד מתחת לסף (${bigBagsCurrentStock}/${bigBagsSafetyStock})! לתאם מיידית פול-טריילר מהמחצבה 🚜`
+    : isBigBagsQuarryAlert
+      ? "לתאם פול-טריילר מהמחצבה 🚜"
+      : "קצב משיכת בלות שגרתי";
 
   return {
     totalCementBags,
     cementPallets,
     isCementHighDemand,
     cementReorderRecommendation,
+    cementInitialStock,
+    cementSafetyStock,
+    cementCurrentStock,
+    isCementLowStock,
+
     totalBigBags,
     bigBagsBreakdown,
     isBigBagsQuarryAlert,
     bigBagsReorderRecommendation,
+    bigBagsInitialStock,
+    bigBagsSafetyStock,
+    bigBagsCurrentStock,
+    isBigBagsLowStock,
+
     totalBlocks,
     blockPallets,
     blocksBreakdown,
+    blocksInitialStock,
+    blocksSafetyStock,
+    blocksCurrentStock,
+    isBlocksLowStock,
+
     totalDryMixBags,
     dryMixBreakdown,
+    dryMixInitialStock,
+    dryMixSafetyStock,
+    dryMixCurrentStock,
+    isDryMixLowStock,
+
+    itemStockStatuses,
+    lowStockItems,
+
     ordersCount: relevantOrders.length,
     lastCalculatedAt: new Date().toLocaleTimeString("he-IL", {
       hour: "2-digit",

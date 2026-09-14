@@ -10,11 +10,31 @@ export interface ParsedProductItem {
   sku?: string;
 }
 
+export interface ItemStockStatus {
+  sku: string;
+  name: string;
+  unit: string;
+  category: "cement" | "big_bag" | "block" | "dry_mix" | "other";
+  initialStock: number;
+  dispensedToday: number;
+  currentStock: number;
+  safetyStockLevel: number;
+  isLowStock: boolean;
+  deficit: number;
+  stockPercentage: number;
+  urgency: "critical" | "warning" | "normal";
+  reorderAdvice: string;
+}
+
 export interface InventoryAggregationSummary {
   totalCementBags: number;
   cementPallets: number;
   isCementHighDemand: boolean;
   cementReorderRecommendation: string;
+  cementInitialStock: number;
+  cementSafetyStock: number;
+  cementCurrentStock: number;
+  isCementLowStock: boolean;
 
   totalBigBags: number;
   bigBagsBreakdown: {
@@ -25,13 +45,29 @@ export interface InventoryAggregationSummary {
   };
   isBigBagsQuarryAlert: boolean;
   bigBagsReorderRecommendation: string;
+  bigBagsInitialStock: number;
+  bigBagsSafetyStock: number;
+  bigBagsCurrentStock: number;
+  isBigBagsLowStock: boolean;
 
   totalBlocks: number;
   blockPallets: number;
   blocksBreakdown: Record<string, number>;
+  blocksInitialStock: number;
+  blocksSafetyStock: number;
+  blocksCurrentStock: number;
+  isBlocksLowStock: boolean;
 
   totalDryMixBags: number;
   dryMixBreakdown: Record<string, number>;
+  dryMixInitialStock: number;
+  dryMixSafetyStock: number;
+  dryMixCurrentStock: number;
+  isDryMixLowStock: boolean;
+
+  // Granular item-level low-stock evaluations
+  itemStockStatuses: ItemStockStatus[];
+  lowStockItems: ItemStockStatus[];
 
   ordersCount: number;
   lastCalculatedAt: string;

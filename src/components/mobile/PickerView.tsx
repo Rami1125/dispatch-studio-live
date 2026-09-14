@@ -67,18 +67,22 @@ export function PickerView({ onSwitchToTv }: PickerViewProps) {
     pushAlert,
   } = useDispatchBoard();
 
-  const [selectedProfile, setSelectedProfile] = useState<PickerProfile>(() => {
+  const [selectedProfile, setSelectedProfile] = useState<PickerProfile>("oren");
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const pickerParam = urlParams.get("picker");
       if (pickerParam === "oren" || pickerParam === "tamir" || pickerParam === "all") {
-        return pickerParam;
+        setSelectedProfile(pickerParam);
+        return;
       }
       const saved = localStorage.getItem("saban_active_picker_profile");
-      if (saved === "oren" || saved === "tamir" || saved === "all") return saved;
+      if (saved === "oren" || saved === "tamir" || saved === "all") {
+        setSelectedProfile(saved);
+      }
     }
-    return "oren";
-  });
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "ready" | "completed">(

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   TrendingUp,
   Package,
@@ -14,8 +14,12 @@ import {
   Clock,
   Send,
   Building2,
+  AlertTriangle,
+  Flame,
 } from "lucide-react";
 import type { Order, OrderItem } from "@/types/dispatch";
+import { parseColumnHProductText, evaluateItemStock } from "@/services/analyticsService";
+import { LowStockBadge } from "@/components/inventory/LowStockBadge";
 import { cn } from "@/lib/utils";
 
 export interface InventoryDemandProps {
@@ -33,7 +37,12 @@ interface AggregatedItem {
   unit: string;
   recommendedOrder: string;
   explanation: string;
-  urgency: "high" | "normal" | "low";
+  urgency: "critical" | "warning" | "high" | "normal" | "low";
+  initialStock: number;
+  currentStock: number;
+  safetyStockLevel: number;
+  isLowStock: boolean;
+  deficit: number;
 }
 
 export function InventoryDemandCard({
@@ -44,12 +53,14 @@ export function InventoryDemandCard({
   onLogReplenishment,
 }: InventoryDemandProps) {
   const [isOpen, setIsOpen] = useState(true);
-  const [buyerPhone, setBuyerPhone] = useState(() => {
+  const [buyerPhone, setBuyerPhone] = useState("050-0000000");
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("saban_buyer_phone") || "050-0000000";
+      const saved = localStorage.getItem("saban_buyer_phone");
+      if (saved) setBuyerPhone(saved);
     }
-    return "050-0000000";
-  });
+  }, []);
   const [isEditingPhone, setIsEditingPhone] = useState(false);
   const [isSent, setIsSent] = useState(false);
 
@@ -76,34 +87,61 @@ export function InventoryDemandCard({
     });
   }, [orders, warehouseBranchNumber]);
 
-  // 2. Aggregate items and calculate smart burn-rate reorder recommendations
+  // 2. Aggregate items and calculate smart burn-rate reorder recommendations with safety stock evaluation
   const aggregatedDemand = useMemo(() => {
     const map = new Map<string, { sku: string; name: string; total: number; unit: string }>();
 
     relevantOrders.forEach((order) => {
-      order.items.forEach((it) => {
-        const key = `${it.sku}_${it.name.trim().toLowerCase()}`;
-        const existing = map.get(key);
-        if (existing) {
-          existing.total += it.quantity;
-        } else {
-          map.set(key, {
-            sku: it.sku || "כללי",
-            name: it.name,
-            total: it.quantity,
-            unit: it.unit || "יח'",
-          });
-        }
-      });
+      // 1. Process itemsFormatted (Column H text) if available
+      if (order.itemsFormatted && order.itemsFormatted.trim()) {
+        const parsed = parseColumnHProductText(order.itemsFormatted);
+        parsed.forEach((it) => {
+          const key = (it.sku || it.name).trim().toLowerCase();
+          const existing = map.get(key);
+          if (existing) {
+            existing.total += it.quantity;
+          } else {
+            map.set(key, {
+              sku: it.sku || "כללי",
+              name: it.name,
+              total: it.quantity,
+              unit: it.unit || "יח'",
+            });
+          }
+        });
+      } else if (order.items && order.items.length > 0) {
+        order.items.forEach((it) => {
+          const key = (it.sku || it.name).trim().toLowerCase();
+          const existing = map.get(key);
+          if (existing) {
+            existing.total += it.quantity;
+          } else {
+            map.set(key, {
+              sku: it.sku || "כללי",
+              name: it.name,
+              total: it.quantity,
+              unit: it.unit || "יח'",
+            });
+          }
+        });
+      }
     });
 
     const items: AggregatedItem[] = [];
 
     map.forEach((val) => {
+      // Evaluate safety stock status from parsed inventory data
+      const stockEval = evaluateItemStock({
+        name: val.name,
+        quantity: val.total,
+        sku: val.sku,
+        unit: val.unit,
+      });
+
       const nameLower = val.name.toLowerCase();
       let recommended = "";
       let explanation = "";
-      let urgency: "high" | "normal" | "low" = "normal";
+      let urgency: AggregatedItem["urgency"] = stockEval.urgency;
 
       // Reorder Rule 1: Small bags (Cement, Adhesive, Plaster) -> Multiples of 40 bags (1 full pallet = 40 bags)
       if (
@@ -114,21 +152,25 @@ export function InventoryDemandCard({
         const totalBagsRec = palletsNeeded * 40;
         recommended = `${palletsNeeded} משטחים (${totalBagsRec} שקים)`;
         explanation = `נצרכו ${val.total} שק. עיגול למשטח שלם (40 שקים למשטח)`;
-        urgency = val.total >= 40 ? "high" : "normal";
+        if (stockEval.isLowStock) {
+          urgency = "critical";
+          explanation = `🚨 מתחת לסף ביטחון! יצאו ${val.total} שק. נותרו ${stockEval.currentStock}/${stockEval.safetyStockLevel} שק.`;
+        }
       }
       // Reorder Rule 2: Bulk big bags (Sand, Sesame, Mortar, Gravel, etc.)
       else if (/בלה|שק גדול|סומסום|חול מחצבה|חצץ|טיט שק גדול/i.test(nameLower)) {
-        if (val.total >= 8) {
+        if (val.total >= 8 || stockEval.isLowStock) {
           const trucks = Math.ceil(val.total / 12);
-          const bagsTotal = trucks * 14;
+          const bagsTotal = Math.max(14, trucks * 14);
           recommended = `${trucks} פול-טריילר (${bagsTotal} שקי בלה)`;
-          explanation = `יצאו ${val.total} שקי בלה. דרישה גבוהה: מומלצת הזמנת פול מלא`;
-          urgency = "high";
+          explanation = stockEval.isLowStock
+            ? `🚨 מתחת לסף ביטחון (${stockEval.currentStock}/${stockEval.safetyStockLevel} בלות). מומלצת הזמנת פול מלא!`
+            : `יצאו ${val.total} שקי בלה. דרישה גבוהה: מומלצת הזמנת פול מלא`;
+          urgency = stockEval.isLowStock ? "critical" : "high";
         } else {
           const rec = Math.max(4, Math.ceil(val.total * 1.5));
           recommended = `${rec} שקי בלה`;
           explanation = `יצאו ${val.total} בלות. השלמת רצפת מלאי לחצר (+50% מרווח ביטחון)`;
-          urgency = "normal";
         }
       }
       // Reorder Rule 3: Blocks (20/20, 10/20, Itong, concrete) -> Multiples of 75 or 150 blocks
@@ -137,15 +179,18 @@ export function InventoryDemandCard({
         const pallets = Math.max(1, Math.ceil(val.total / palletSize));
         const blocksRec = pallets * palletSize;
         recommended = `${pallets} משטחים (${blocksRec} בלוקים)`;
-        explanation = `נצרכו ${val.total} יח'. עיגול למשטחים שלמים (${palletSize} יח'/משטח)`;
-        urgency = val.total >= palletSize ? "high" : "normal";
+        explanation = stockEval.isLowStock
+          ? `🚨 מתחת לסף ביטחון! נותרו ${stockEval.currentStock}/${stockEval.safetyStockLevel} יח' בלבד.`
+          : `נצרכו ${val.total} יח'. עיגול למשטחים שלמים (${palletSize} יח'/משטח)`;
+        if (stockEval.isLowStock) urgency = "critical";
       }
       // Reorder Rule 4: Generic / default logic
       else {
         const bufferQty = Math.ceil(val.total * 1.25);
         recommended = `${bufferQty} ${val.unit}`;
-        explanation = `יצאו ${val.total} ${val.unit}. מרווח ביטחון 25%+ לחידוש מלאי`;
-        urgency = "normal";
+        explanation = stockEval.isLowStock
+          ? `🚨 מלאי נמוך (${stockEval.currentStock}/${stockEval.safetyStockLevel} ${val.unit}). חידוש דחוף.`
+          : `יצאו ${val.total} ${val.unit}. מרווח ביטחון 25%+ לחידוש מלאי`;
       }
 
       items.push({
@@ -156,12 +201,27 @@ export function InventoryDemandCard({
         recommendedOrder: recommended,
         explanation,
         urgency,
+        initialStock: stockEval.initialStock,
+        currentStock: stockEval.currentStock,
+        safetyStockLevel: stockEval.safetyStockLevel,
+        isLowStock: stockEval.isLowStock,
+        deficit: stockEval.deficit,
       });
     });
 
-    // Sort by quantity dispensed descending
-    return items.sort((a, b) => b.totalDispensed - a.totalDispensed);
+    // Prioritize low stock items first, then by quantity dispensed descending
+    return items.sort((a, b) => {
+      if (a.isLowStock && !b.isLowStock) return -1;
+      if (!a.isLowStock && b.isLowStock) return 1;
+      return b.totalDispensed - a.totalDispensed;
+    });
   }, [relevantOrders]);
+
+  // Low stock count for quick alert badges
+  const lowStockCount = useMemo(
+    () => aggregatedDemand.filter((i) => i.isLowStock).length,
+    [aggregatedDemand],
+  );
 
   // Totals
   const totalBagsDispensed = useMemo(() => {
@@ -208,9 +268,19 @@ export function InventoryDemandCard({
     if (aggregatedDemand.length === 0) {
       msg += `אין פריטים שיצאו היום עד כה מהמחסן.\n\n`;
     } else {
+      // Highlight low stock items first if any
+      const criticalItems = aggregatedDemand.filter((i) => i.isLowStock);
+      if (criticalItems.length > 0) {
+        msg += `🚨 *התראת מלאי נמוך קריטי (ירד מתחת לסף ביטחון):*\n`;
+        criticalItems.forEach((item, idx) => {
+          msg += `⚠️ ${idx + 1}. *${item.name}* (מק״ט ${item.sku}): נותרו במגרש *${item.currentStock}* מתוך סף ${item.safetyStockLevel} ${item.unit}! (יצאו היום: ${item.totalDispensed} ${item.unit})\n   👈 נדרשת הזמנה דחופה: *${item.recommendedOrder}*\n`;
+        });
+        msg += `\n`;
+      }
+
       msg += `*📦 פירוט פריטים שיצאו מהחצר היום:*\n`;
       aggregatedDemand.forEach((item, idx) => {
-        msg += `${idx + 1}. ${item.name} (מק״ט ${item.sku}): *${item.totalDispensed} ${item.unit}*\n`;
+        msg += `${idx + 1}. ${item.name} (מק״ט ${item.sku}): *${item.totalDispensed} ${item.unit}* (נותרו: ${item.currentStock}/${item.safetyStockLevel})\n`;
       });
 
       msg += `\n*🎯 המלצת רכש חכמה למחר (מעוגל למשטחים/פול-טריילר):*\n`;
@@ -256,11 +326,17 @@ export function InventoryDemandCard({
             <TrendingUp className="size-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-black text-white">סיכום יציאות ודרישת מלאי להיום</h3>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 {warehouseName}
               </span>
+              {lowStockCount > 0 && (
+                <span className="flex items-center gap-1 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-300 ring-1 ring-rose-500/50 animate-pulse">
+                  <Flame className="size-3 text-rose-400" />
+                  <span>{lowStockCount} מתחת לסף ביטחון</span>
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-400">
               {relevantOrders.length} הזמנות יצאו/בהכנה · {aggregatedDemand.length} מק"טים פעילים
@@ -282,6 +358,29 @@ export function InventoryDemandCard({
 
       {isOpen && (
         <div className="p-4 space-y-4">
+          {/* Low Stock Urgent Alert Banner */}
+          {lowStockCount > 0 && (
+            <div className="rounded-xl border border-rose-500/50 bg-gradient-to-r from-rose-950/60 via-slate-900 to-rose-950/40 p-3 flex items-center justify-between gap-3 text-xs shadow-lg shadow-rose-950/30 animate-pulse">
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-3 w-3 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500" />
+                </span>
+                <div>
+                  <span className="font-black text-rose-200 block text-xs sm:text-sm">
+                    ⚠️ התראת מלאי ביטחון: {lowStockCount} פריטים ירדו מתחת לסף הביטחון המוגדר!
+                  </span>
+                  <span className="text-[11px] text-rose-300/80">
+                    קצב המשיכה מהחצר היום גבוה מסף הבטיחות של המגרש. נדרש תיאום רכש דחוף עם נתנאל.
+                  </span>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-lg bg-rose-500/30 px-2 py-1 text-[11px] font-black text-rose-200 border border-rose-500/40">
+                רכש דחוף 🔥
+              </span>
+            </div>
+          )}
+
           {/* Quick Stats Badges */}
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="bg-slate-950/70 p-2 rounded-xl border border-slate-800/80">
@@ -308,43 +407,103 @@ export function InventoryDemandCard({
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 px-2">
                 <span>פריט / מק"ט שיצא מהחצר</span>
                 <span>המלצת רכש חכמה למחר</span>
               </div>
 
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
                 {aggregatedDemand.map((item) => (
                   <div
                     key={`${item.sku}_${item.name}`}
-                    className="bg-slate-950/80 rounded-xl p-2.5 border border-slate-800 hover:border-slate-700 transition-colors flex items-start justify-between gap-3 text-xs"
+                    className={cn(
+                      "rounded-xl p-3 border transition-all flex flex-col gap-2.5 text-xs relative overflow-hidden",
+                      item.isLowStock
+                        ? "bg-gradient-to-br from-rose-950/30 via-slate-900 to-slate-950/90 border-rose-500/50 shadow-md shadow-rose-950/30 ring-1 ring-rose-500/30"
+                        : "bg-slate-950/80 border-slate-800 hover:border-slate-700",
+                    )}
                   >
-                    {/* Left: Dispensed Today */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-black text-slate-100 leading-tight truncate">
-                          {item.name}
-                        </span>
-                        <span className="text-[10px] font-mono text-slate-500">#{item.sku}</span>
+                    {/* Header Row: Item name, SKU, and Pulsating Low Stock Badge */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-black text-slate-100 text-sm leading-tight">
+                            {item.name}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-500">#{item.sku}</span>
+                        </div>
                       </div>
-                      <div className="mt-1 flex items-center gap-1.5 text-slate-400 text-[11px]">
-                        <span>יצא היום מהחצר:</span>
-                        <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded">
+
+                      {/* Pulsating Low Stock Alert Badge */}
+                      {item.isLowStock && (
+                        <LowStockBadge
+                          currentStock={item.currentStock}
+                          safetyStockLevel={item.safetyStockLevel}
+                          unit={item.unit}
+                          size="xs"
+                          urgency={item.urgency === "critical" ? "critical" : "warning"}
+                        />
+                      )}
+                    </div>
+
+                    {/* Stock Metrics Row */}
+                    <div className="grid grid-cols-3 gap-2 bg-slate-900/80 p-2 rounded-lg border border-slate-800/80 text-center">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">יצאו מהחצר היום</span>
+                        <span className="font-mono font-black text-amber-400 text-xs">
                           {item.totalDispensed} {item.unit}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">נותרו במגרש</span>
+                        <span
+                          className={cn(
+                            "font-mono font-black text-xs",
+                            item.isLowStock
+                              ? "text-rose-400 animate-pulse font-bold"
+                              : "text-emerald-400",
+                          )}
+                        >
+                          {item.currentStock} {item.unit}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">סף ביטחון מוגדר</span>
+                        <span className="font-mono font-bold text-slate-300 text-xs">
+                          {item.safetyStockLevel} {item.unit}
                         </span>
                       </div>
                     </div>
 
-                    {/* Right: AI Burn-Rate Reorder */}
-                    <div className="text-left shrink-0 max-w-[50%]">
-                      <div className="flex items-center justify-end gap-1 text-sky-300 font-black">
+                    {/* Depletion Progress Gauge */}
+                    <div className="space-y-1">
+                      <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden flex">
+                        <div
+                          className={cn(
+                            "h-full transition-all duration-500",
+                            item.isLowStock
+                              ? "bg-rose-500 animate-pulse"
+                              : item.currentStock <= item.safetyStockLevel * 1.3
+                                ? "bg-amber-400"
+                                : "bg-emerald-500",
+                          )}
+                          style={{
+                            width: `${Math.min(100, Math.max(5, (item.currentStock / Math.max(1, item.initialStock)) * 100))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bottom Row: AI Burn-Rate Reorder */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60">
+                      <span className="text-[10px] text-slate-400 truncate flex-1">
+                        {item.explanation}
+                      </span>
+                      <div className="flex items-center gap-1 text-sky-300 font-black shrink-0">
                         <Sparkles className="size-3 text-amber-400 shrink-0" />
                         <span className="font-bold text-xs">{item.recommendedOrder}</span>
                       </div>
-                      <span className="text-[10px] text-slate-400 block leading-tight mt-0.5">
-                        {item.explanation}
-                      </span>
                     </div>
                   </div>
                 ))}

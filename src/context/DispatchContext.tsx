@@ -265,31 +265,13 @@ function minutesUntil(targetTime: string, now: Date): number {
 
 export function DispatchProvider({ children }: { children: ReactNode }) {
   /* ---------------- Persistent Local Overrides (localStorage) ---------------- */
-  const [orderStatusOverrides, setOrderStatusOverrides] = useState<OrderStatusOverrides>(() =>
-    loadLocalOverrides(),
-  );
+  const [orderStatusOverrides, setOrderStatusOverrides] = useState<OrderStatusOverrides>({});
   const overridesRef = useRef<OrderStatusOverrides>(orderStatusOverrides);
   overridesRef.current = orderStatusOverrides;
 
-  /* Initial order list populated with any active local overrides */
-  const initial = useMemo(() => {
-    const base = getMockOrders();
-    const saved = loadLocalOverrides();
-    return base.map((o) => {
-      const ov = saved[o.orderId];
-      if (ov) {
-        return {
-          ...o,
-          status: ov.status,
-          updatedAt: new Date(ov.timestamp).toISOString(),
-        };
-      }
-      return o;
-    });
-  }, []);
-
-  const [published, setPublished] = useState<Order[]>(initial);
-  const [draft, setDraft] = useState<Order[]>(() => clone(initial));
+  /* Deterministic initial order list for SSR and hydration matching */
+  const [published, setPublished] = useState<Order[]>(() => getMockOrders());
+  const [draft, setDraft] = useState<Order[]>(() => clone(getMockOrders()));
   const [alerts, setAlerts] = useState<NoaAlert[]>([]);
   const [flash, setFlash] = useState<NoaAlert | null>(null);
   const [latestOrderEvent, setLatestOrderEvent] = useState<OrderEvent | null>(null);
@@ -308,17 +290,15 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const [isDirty, setIsDirty] = useState(false);
 
   /* ---------------- Real-time Clock & Live Change Tracking ---------------- */
-  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date("2026-09-14T11:00:00.000Z"));
   useEffect(() => {
+    setCurrentTime(new Date());
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
   const [recentlyChangedOrderIds, setRecentlyChangedOrderIds] = useState<Record<string, number>>(
-    () => ({
-      // Pre-seed an initial order with a recent change demo so it blinks live on screen immediately
-      "6215440": Date.now() - 8000,
-    }),
+    {},
   );
 
   const recordOrderChange = useCallback((orderId: string) => {
@@ -328,38 +308,26 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  useEffect(() => {
+    // Pre-seed demo highlight safely after mount
+    setRecentlyChangedOrderIds({
+      "6215440": Date.now() - 8000,
+    });
+  }, []);
+
   /* ---------------- Screensaver State ---------------- */
   const [isScreensaverActive, setScreensaverActive] = useState(false);
-  const [screensaverSettings, setScreensaverSettings] = useState<ScreensaverSettings>(() => {
-    try {
-      const raw = localStorage.getItem("saban-screensaver-cfg");
-      return raw
-        ? { ...DEFAULT_SCREENSAVER_SETTINGS, ...JSON.parse(raw) }
-        : DEFAULT_SCREENSAVER_SETTINGS;
-    } catch {
-      return DEFAULT_SCREENSAVER_SETTINGS;
-    }
-  });
+  const [screensaverSettings, setScreensaverSettings] = useState<ScreensaverSettings>(
+    DEFAULT_SCREENSAVER_SETTINGS,
+  );
   const [idleSecondsCount, setIdleSecondsCount] = useState(0);
   const lastInteractionTime = useRef(Date.now());
 
   /* ---------------- AI Model & Schedule State ---------------- */
-  const [aiTraining, setAiTraining] = useState<AITrainingSettings>(() => {
-    try {
-      const raw = localStorage.getItem("saban-ai-training-cfg");
-      return raw ? { ...DEFAULT_AI_TRAINING, ...JSON.parse(raw) } : DEFAULT_AI_TRAINING;
-    } catch {
-      return DEFAULT_AI_TRAINING;
-    }
-  });
-  const [scheduledMessages, setScheduledMessages] = useState<ScheduledBroadcast[]>(() => {
-    try {
-      const raw = localStorage.getItem("saban-scheduled-broadcasts");
-      return raw ? JSON.parse(raw) : DEFAULT_SCHEDULED_MESSAGES;
-    } catch {
-      return DEFAULT_SCHEDULED_MESSAGES;
-    }
-  });
+  const [aiTraining, setAiTraining] = useState<AITrainingSettings>(DEFAULT_AI_TRAINING);
+  const [scheduledMessages, setScheduledMessages] = useState<ScheduledBroadcast[]>(
+    DEFAULT_SCHEDULED_MESSAGES,
+  );
   const [targetedBriefings, setTargetedBriefings] = useState({
     forWarehouse: "לתעדף העמסת שקי בלה צמוד לקבינה ולאחריהם משטחי סבן 60060.",
     forDriver: "עומס בכביש 1 לכיוון שער הגיא (14 דק' עיכוב). מומלץ שימוש בציר 431.",
@@ -368,6 +336,59 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     updatedAt: "08:15",
   });
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+
+  /* Client-side hydration of localStorage persistent settings & overrides */
+  useEffect(() => {
+    // 1. Local overrides
+    const saved = loadLocalOverrides();
+    if (Object.keys(saved).length > 0) {
+      setOrderStatusOverrides(saved);
+      const applyOv = (orders: Order[]) =>
+        orders.map((o) => {
+          const ov = saved[o.orderId];
+          if (ov) {
+            return {
+              ...o,
+              status: ov.status,
+              updatedAt: new Date(ov.timestamp).toISOString(),
+            };
+          }
+          return o;
+        });
+      setPublished((prev) => applyOv(prev));
+      setDraft((prev) => applyOv(prev));
+    }
+
+    // 2. Screensaver settings
+    try {
+      const raw = localStorage.getItem("saban-screensaver-cfg");
+      if (raw) {
+        setScreensaverSettings((prev) => ({ ...prev, ...JSON.parse(raw) }));
+      }
+    } catch {
+      /* storage unavailable */
+    }
+
+    // 3. AI training
+    try {
+      const raw = localStorage.getItem("saban-ai-training-cfg");
+      if (raw) {
+        setAiTraining((prev) => ({ ...prev, ...JSON.parse(raw) }));
+      }
+    } catch {
+      /* storage unavailable */
+    }
+
+    // 4. Scheduled broadcasts
+    try {
+      const raw = localStorage.getItem("saban-scheduled-broadcasts");
+      if (raw) {
+        setScheduledMessages(JSON.parse(raw));
+      }
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
 
   const updateScreensaverSettings = useCallback((patch: Partial<ScreensaverSettings>) => {
     setScreensaverSettings((prev) => {
