@@ -159,6 +159,33 @@ export function parseCsvLine(line: string): string[] {
   return out;
 }
 
+/** מפצל CSV לשורות תוך כיבוד מרכאות (תאים עם ירידות שורה). */
+export function splitCsvRecords(csv: string): string[] {
+  const records: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < csv.length; i++) {
+    const ch = csv[i];
+    if (ch === '"') {
+      if (inQuotes && csv[i + 1] === '"') {
+        cur += '""';
+        i++;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      cur += ch;
+    } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      if (ch === "\r" && csv[i + 1] === "\n") i++;
+      if (cur.trim().length > 0) records.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim().length > 0) records.push(cur);
+  return records;
+}
+
 function toNumber(value: string | undefined): number {
   if (!value) return 0;
   const n = Number(String(value).replace(/[^\d.-]/g, ""));
