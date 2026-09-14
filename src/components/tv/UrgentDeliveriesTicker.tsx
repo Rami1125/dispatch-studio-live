@@ -181,6 +181,11 @@ function evaluateUrgency(orders: Order[], now: Date): UrgentItem[] {
 export function UrgentDeliveriesTicker() {
   const { published, openStudio, selectOrder, quickUpdateStatus } = useDispatchBoard();
   const now = useTickerClock();
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   // Settings & display state
   const [filter, setFilter] = useState<"all" | "critical" | "loading" | "en_route">("all");
@@ -242,6 +247,10 @@ export function UrgentDeliveriesTicker() {
 
   // Speed calculation for marquee (default base duration 42s)
   const marqueeDurationSeconds = Math.max(16, Math.round(42 / speedMultiplier));
+
+  if (!hasMounted) {
+    return <section aria-hidden="true" className="h-12 rounded-2xl border border-border/70 bg-card/70" />;
+  }
 
   if (allUrgentItems.length === 0) {
     return (
