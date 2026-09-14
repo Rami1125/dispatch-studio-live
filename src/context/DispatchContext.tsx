@@ -14,7 +14,10 @@ import type {
   DispatchState,
   NoaAlert,
   Order,
+  OrderEvent,
   OrderStatus,
+  OrderStatusOverride,
+  OrderStatusOverrides,
   StatusSyncRecord,
 } from "@/types/dispatch";
 import type {
@@ -86,6 +89,83 @@ const DEFAULT_SCHEDULED_MESSAGES: ScheduledBroadcast[] = [
   },
 ];
 
+const OVERRIDES_STORAGE_KEY = "saban_order_status_overrides";
+const SOURCE_CONFIG_STORAGE_KEY = "saban-dispatch-source";
+
+function loadLocalOverrides(): OrderStatusOverrides {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(OVERRIDES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed as OrderStatusOverrides;
+    }
+  } catch (err) {
+    console.warn("Could not read saban_order_status_overrides from localStorage:", err);
+  }
+  return {};
+}
+
+function saveLocalOverrides(overrides: OrderStatusOverrides): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(OVERRIDES_STORAGE_KEY, JSON.stringify(overrides));
+  } catch (err) {
+    console.warn("Could not save saban_order_status_overrides to localStorage:", err);
+  }
+}
+
+/**
+ * Two-Way Optimistic Sync & Delta Merge (Reconciliation):
+ * Compares freshly fetched orders from Google Sheets against persistent local overrides.
+ * - If the sheet has caught up and matches the override, cleans up the override.
+ * - If the sheet has an explicit newer timestamp than the override, accepts the sheet's status.
+ * - If the local override is newer or equal, preserves the local status.
+ */
+function reconcileOrdersWithOverrides(
+  fetchedOrders: Order[],
+  currentOverrides: OrderStatusOverrides,
+): { mergedOrders: Order[]; updatedOverrides: OrderStatusOverrides; cleanedCount: number } {
+  const updatedOverrides: OrderStatusOverrides = { ...currentOverrides };
+  let cleanedCount = 0;
+
+  const mergedOrders = fetchedOrders.map((fetched) => {
+    const override = updatedOverrides[fetched.orderId];
+    if (!override) {
+      return fetched;
+    }
+
+    // Check if the sheet now reflects the local status
+    if (fetched.status === override.status) {
+      // Sheet has successfully synchronized! Clean up the local override.
+      delete updatedOverrides[fetched.orderId];
+      cleanedCount++;
+      return fetched;
+    }
+
+    // Check if the sheet was updated externally after the local override was created
+    const sheetTimestamp = fetched.updatedAt ? new Date(fetched.updatedAt).getTime() : 0;
+    const isValidSheetTime = !Number.isNaN(sheetTimestamp) && sheetTimestamp > 0;
+
+    if (isValidSheetTime && sheetTimestamp > override.timestamp) {
+      // Sheet has a newer change made externally. Respect sheet update and clear stale override.
+      delete updatedOverrides[fetched.orderId];
+      cleanedCount++;
+      return fetched;
+    }
+
+    // Otherwise, local manual override is newer. Preserve the local status!
+    return {
+      ...fetched,
+      status: override.status,
+      updatedAt: new Date(override.timestamp).toISOString(),
+    };
+  });
+
+  return { mergedOrders, updatedOverrides, cleanedCount };
+}
+
 interface DispatchContextValue extends DispatchState {
   /* studio */
   isStudioOpen: boolean;
@@ -95,10 +175,13 @@ interface DispatchContextValue extends DispatchState {
   selectedOrderId: string | null;
   selectOrder: (orderId: string | null) => void;
 
-  /* draft editing */
+  /* draft editing & status sync */
   updateOrder: (orderId: string, patch: Partial<Order>) => void;
+  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   setOrderStatus: (orderId: string, status: OrderStatus) => void;
   quickUpdateStatus: (orderId: string, status: OrderStatus) => void;
+  clearOrderStatusOverride: (orderId: string) => void;
+  clearAllOrderStatusOverrides: () => void;
   toggleItemApproval: (orderId: string, sku: string) => void;
   approveAllItems: (orderId: string, approved: boolean) => void;
   updateItemQuantity: (orderId: string, sku: string, quantity: number) => void;
@@ -150,6 +233,9 @@ interface DispatchContextValue extends DispatchState {
   /* derived */
   focusOrder: Order | null;
   counts: Record<OrderStatus, number>;
+  currentTime: Date;
+  recentlyChangedOrderIds: Record<string, number>;
+  recordOrderChange: (orderId: string) => void;
 }
 
 const DispatchContext = createContext<DispatchContextValue | null>(null);
@@ -167,22 +253,71 @@ function minutesUntil(targetTime: string, now: Date): number {
 }
 
 export function DispatchProvider({ children }: { children: ReactNode }) {
-  const initial = useMemo(() => getMockOrders(), []);
+  /* ---------------- Persistent Local Overrides (localStorage) ---------------- */
+  const [orderStatusOverrides, setOrderStatusOverrides] = useState<OrderStatusOverrides>(() =>
+    loadLocalOverrides(),
+  );
+  const overridesRef = useRef<OrderStatusOverrides>(orderStatusOverrides);
+  overridesRef.current = orderStatusOverrides;
+
+  /* Initial order list populated with any active local overrides */
+  const initial = useMemo(() => {
+    const base = getMockOrders();
+    const saved = loadLocalOverrides();
+    return base.map((o) => {
+      const ov = saved[o.orderId];
+      if (ov) {
+        return {
+          ...o,
+          status: ov.status,
+          updatedAt: new Date(ov.timestamp).toISOString(),
+        };
+      }
+      return o;
+    });
+  }, []);
+
   const [published, setPublished] = useState<Order[]>(initial);
   const [draft, setDraft] = useState<Order[]>(() => clone(initial));
   const [alerts, setAlerts] = useState<NoaAlert[]>([]);
   const [flash, setFlash] = useState<NoaAlert | null>(null);
+  const [latestOrderEvent, setLatestOrderEvent] = useState<OrderEvent | null>(null);
   const [isStudioOpen, setStudioOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [sourceMode, setSourceModeState] = useState<DataSourceMode>("sheets");
   const [sheetUrl, setSheetUrlState] = useState(DEFAULT_SHEET_URL);
+  const [webhookUrl, setWebhookUrlState] = useState<string>("");
+  const webhookUrlRef = useRef(webhookUrl);
+  webhookUrlRef.current = webhookUrl;
+
   const [pollingSeconds, setPollingSecondsState] = useState(45);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<DispatchState["syncStatus"]>("idle");
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
-  /* ---------------- screensaver state ---------------- */
+  /* ---------------- Real-time Clock & Live Change Tracking ---------------- */
+  const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const [recentlyChangedOrderIds, setRecentlyChangedOrderIds] = useState<Record<string, number>>(
+    () => ({
+      // Pre-seed an initial order with a recent change demo so it blinks live on screen immediately
+      "6215440": Date.now() - 8000,
+    }),
+  );
+
+  const recordOrderChange = useCallback((orderId: string) => {
+    setRecentlyChangedOrderIds((prev) => ({
+      ...prev,
+      [orderId]: Date.now(),
+    }));
+  }, []);
+
+  /* ---------------- Screensaver State ---------------- */
   const [isScreensaverActive, setScreensaverActive] = useState(false);
   const [screensaverSettings, setScreensaverSettings] = useState<ScreensaverSettings>(() => {
     try {
@@ -197,7 +332,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const [idleSecondsCount, setIdleSecondsCount] = useState(0);
   const lastInteractionTime = useRef(Date.now());
 
-  /* ---------------- AI model & schedule state ---------------- */
+  /* ---------------- AI Model & Schedule State ---------------- */
   const [aiTraining, setAiTraining] = useState<AITrainingSettings>(() => {
     try {
       const raw = localStorage.getItem("saban-ai-training-cfg");
@@ -285,7 +420,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* ---------------- alerts ---------------- */
+  /* ---------------- Alerts & NoaFlashOverlay Triggers ---------------- */
   const pushAlert = useCallback((message: string, level: AlertLevel = "info", isFlash = false) => {
     const alert: NoaAlert = {
       id: uid(),
@@ -293,7 +428,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       message,
       createdAt: new Date().toISOString(),
       isFlash,
-      durationMs: 9000,
+      durationMs: level === "critical" ? 11000 : 8500,
     };
     setAlerts((prev) => [alert, ...prev].slice(0, 12));
     if (isFlash) {
@@ -312,7 +447,156 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
-  /* ---------------- draft editing ---------------- */
+  /* ---------------- Status Sync Records (Derived from overrides) ---------------- */
+  const statusSyncRecords = useMemo<Record<string, StatusSyncRecord>>(() => {
+    const records: Record<string, StatusSyncRecord> = {};
+    for (const [id, ov] of Object.entries(orderStatusOverrides)) {
+      records[id] = {
+        orderId: id,
+        status: ov.status,
+        updatedAt: new Date(ov.timestamp).toISOString(),
+        syncedToSheet: ov.synced,
+        lastAttemptAt: new Date(ov.timestamp).toISOString(),
+        message: ov.synced ? "מסונכרן לגיליון" : "נשמר מקומית (ממתין לסנכרון)",
+      };
+    }
+    return records;
+  }, [orderStatusOverrides]);
+
+  /* ---------------- Clear Overrides ---------------- */
+  const clearOrderStatusOverride = useCallback((orderId: string) => {
+    setOrderStatusOverrides((prev) => {
+      const next = { ...prev };
+      delete next[orderId];
+      saveLocalOverrides(next);
+      return next;
+    });
+  }, []);
+
+  const clearAllOrderStatusOverrides = useCallback(() => {
+    setOrderStatusOverrides({});
+    saveLocalOverrides({});
+  }, []);
+
+  /* ---------------- Async Background Webhook Dispatch (Write-Back) ---------------- */
+  const dispatchWebhookUpdate = useCallback((orderId: string, status: OrderStatus) => {
+    const currentWebhook = webhookUrlRef.current;
+
+    fetch("/api/sheets/update-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "updateOrderStatus",
+        sheet: "דשבורד_הזמנות",
+        sheetName: "דשבורד_הזמנות",
+        orderId,
+        status,
+        webhookUrl: currentWebhook || undefined,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const data = (await res.json()) as { success?: boolean; syncedToSheet?: boolean };
+        if (data.success && data.syncedToSheet) {
+          setOrderStatusOverrides((prev) => {
+            if (!prev[orderId]) return prev;
+            const updated = {
+              ...prev,
+              [orderId]: { ...prev[orderId], synced: true },
+            };
+            saveLocalOverrides(updated);
+            return updated;
+          });
+          setLatestOrderEvent({
+            type: "override_synced",
+            orderId,
+            message: `סטטוס הזמנה #${orderId} סונכרן ישירות לעמודת סטטוס בגיליון Google Sheets`,
+            timestamp: Date.now(),
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Dispatch] Background sync deferred for order #${orderId}:`, err);
+        // Non-blocking: local override remains active and will be preserved during polling!
+      });
+  }, []);
+
+  /* ---------------- Optimistic Status Update ---------------- */
+  const updateOrderStatus = useCallback(
+    (orderId: string, newStatus: OrderStatus) => {
+      const now = Date.now();
+      const nowIso = new Date(now).toISOString();
+
+      // 1. Instantly update React state (both published board and editor draft)
+      setPublished((prev) =>
+        prev.map((o) =>
+          o.orderId === orderId ? { ...o, status: newStatus, updatedAt: nowIso } : o,
+        ),
+      );
+      setDraft((prev) =>
+        prev.map((o) =>
+          o.orderId === orderId ? { ...o, status: newStatus, updatedAt: nowIso } : o,
+        ),
+      );
+
+      // Trigger visual real-time pulse on card
+      recordOrderChange(orderId);
+
+      // 2. Persist to localStorage under key `saban_order_status_overrides`
+      const overrideEntry: OrderStatusOverride = {
+        status: newStatus,
+        timestamp: now,
+        synced: false,
+      };
+      setOrderStatusOverrides((prev) => {
+        const next = { ...prev, [orderId]: overrideEntry };
+        saveLocalOverrides(next);
+        return next;
+      });
+
+      // Flash overlay & event dispatch on urgency or status change
+      const isUrgent = newStatus === "בהעמסה";
+      if (isUrgent) {
+        setLatestOrderEvent({
+          type: "status_urgent",
+          orderId,
+          message: `הזמנה #${orderId} הועברה להעמסה כעת!`,
+          timestamp: now,
+        });
+        pushAlert(`הזמנה #${orderId} הועברה להעמסה כעת!`, "warning", true);
+      } else {
+        setLatestOrderEvent({
+          type: "status_changed",
+          orderId,
+          message: `הזמנה #${orderId} עודכנה לסטטוס: ${newStatus}`,
+          timestamp: now,
+        });
+        pushAlert(`הזמנה #${orderId} עודכנה לסטטוס: ${newStatus}`, "info");
+      }
+
+      // 3. Dispatch async background request to Google Apps Script Webhook (non-blocking)
+      dispatchWebhookUpdate(orderId, newStatus);
+    },
+    [dispatchWebhookUpdate, pushAlert, recordOrderChange],
+  );
+
+  const setOrderStatus = useCallback(
+    (orderId: string, status: OrderStatus) => {
+      updateOrderStatus(orderId, status);
+    },
+    [updateOrderStatus],
+  );
+
+  const quickUpdateStatus = useCallback(
+    (orderId: string, status: OrderStatus) => {
+      updateOrderStatus(orderId, status);
+    },
+    [updateOrderStatus],
+  );
+
+  /* ---------------- Draft Editing ---------------- */
   const mutateDraft = useCallback((fn: (orders: Order[]) => Order[]) => {
     setDraft((prev) => fn(clone(prev)));
     setIsDirty(true);
@@ -320,34 +604,17 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
 
   const updateOrder = useCallback(
     (orderId: string, patch: Partial<Order>) => {
+      if (patch.status) {
+        updateOrderStatus(orderId, patch.status);
+      }
       mutateDraft((orders) =>
         orders.map((o) =>
           o.orderId === orderId ? { ...o, ...patch, updatedAt: new Date().toISOString() } : o,
         ),
       );
+      recordOrderChange(orderId);
     },
-    [mutateDraft],
-  );
-
-  const setOrderStatus = useCallback(
-    (orderId: string, status: OrderStatus) => {
-      updateOrder(orderId, { status });
-    },
-    [updateOrder],
-  );
-
-  const quickUpdateStatus = useCallback(
-    (orderId: string, status: OrderStatus) => {
-      const nowIso = new Date().toISOString();
-      setPublished((prev) =>
-        prev.map((o) => (o.orderId === orderId ? { ...o, status, updatedAt: nowIso } : o)),
-      );
-      setDraft((prev) =>
-        prev.map((o) => (o.orderId === orderId ? { ...o, status, updatedAt: nowIso } : o)),
-      );
-      pushAlert(`הזמנה #${orderId} עודכנה ישירות לסטטוס: ${status}`, "info");
-    },
-    [pushAlert],
+    [mutateDraft, recordOrderChange, updateOrderStatus],
   );
 
   const toggleItemApproval = useCallback(
@@ -364,8 +631,9 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
             : o,
         ),
       );
+      recordOrderChange(orderId);
     },
-    [mutateDraft],
+    [mutateDraft, recordOrderChange],
   );
 
   const approveAllItems = useCallback(
@@ -377,8 +645,9 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
             : o,
         ),
       );
+      recordOrderChange(orderId);
     },
-    [mutateDraft],
+    [mutateDraft, recordOrderChange],
   );
 
   const updateItemQuantity = useCallback(
@@ -395,47 +664,85 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
             : o,
         ),
       );
+      recordOrderChange(orderId);
     },
-    [mutateDraft],
+    [mutateDraft, recordOrderChange],
   );
 
-  /* ---------------- broadcast ---------------- */
+  /* ---------------- Broadcast ---------------- */
   const publish = useCallback(() => {
     setPublished(clone(draft));
     setIsDirty(false);
+    draft.forEach((d) => recordOrderChange(d.orderId));
     pushAlert("עודכן שידור חי — לוח ההזמנות רוענן", "success");
-  }, [draft, pushAlert]);
+  }, [draft, pushAlert, recordOrderChange]);
 
   const discardDraft = useCallback(() => {
     setDraft(clone(published));
     setIsDirty(false);
   }, [published]);
 
-  /* ---------------- data source ---------------- */
-  const STORAGE_KEY = "saban-dispatch-source";
+  /* ---------------- Data Source & Delta Merge Polling ---------------- */
   const isDirtyRef = useRef(false);
   isDirtyRef.current = isDirty;
   const failures = useRef(0);
 
-  /** מדווח בקול על שינויי סטטוס ומק"טים שהגיעו מהגיליון */
+  /** Announce changes and trigger NoaFlashOverlay on new orders or critical status */
   const announceChanges = useCallback(
     (prev: Order[], next: Order[]) => {
       const prevById = new Map(prev.map((o) => [o.orderId, o]));
+
       next.forEach((order) => {
         const before = prevById.get(order.orderId);
+
+        // 1. Brand new order detected from Google Sheets!
         if (!before) {
-          pushAlert(`הזמנה חדשה מהגיליון — ${order.orderId} ${order.customerName}`, "info");
+          recordOrderChange(order.orderId);
+          const msg = `הזמנה חדשה התקבלה! #${order.orderId} עבור ${order.customerName} (${order.city})`;
+          setLatestOrderEvent({
+            type: "new_order",
+            orderId: order.orderId,
+            order,
+            message: msg,
+            timestamp: Date.now(),
+          });
+          // Trigger NoaFlashOverlay for new order alert
+          pushAlert(msg, "warning", true);
           return;
         }
+
+        // 2. Status change detected from sheet update
         if (before.status !== order.status) {
-          pushAlert(
-            `סטטוס עודכן — הזמנה ${order.orderId} ${order.customerName}: ${order.status}`,
-            order.status === "בהעמסה" ? "warning" : "success",
-          );
+          recordOrderChange(order.orderId);
+          const isUrgent = order.status === "בהעמסה";
+          const msg = `סטטוס עודכן — הזמנה ${order.orderId} ${order.customerName}: ${order.status}`;
+
+          if (isUrgent) {
+            setLatestOrderEvent({
+              type: "status_urgent",
+              orderId: order.orderId,
+              order,
+              message: msg,
+              timestamp: Date.now(),
+            });
+            pushAlert(msg, "warning", true);
+          } else {
+            setLatestOrderEvent({
+              type: "status_changed",
+              orderId: order.orderId,
+              order,
+              message: msg,
+              timestamp: Date.now(),
+            });
+            pushAlert(msg, order.status === "סופק" ? "success" : "info");
+          }
         }
+
+        // 3. New SKUs added to existing order
         const beforeSkus = new Set(before.items.map((i) => i.sku));
         const added = order.items.filter((i) => !beforeSkus.has(i.sku));
         if (added.length > 0) {
+          recordOrderChange(order.orderId);
           pushAlert(
             `נוספו ${added.length} מק"טים להזמנה ${order.orderId} (${added
               .map((i) => i.sku)
@@ -443,9 +750,12 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
             "info",
           );
         }
+
+        // 4. Item approvals
         const beforeApproved = before.items.filter((i) => i.isApproved).length;
         const nowApproved = order.items.filter((i) => i.isApproved).length;
         if (nowApproved > beforeApproved) {
+          recordOrderChange(order.orderId);
           pushAlert(
             `אושרו ${nowApproved - beforeApproved} מק"טים נוספים בהזמנה ${order.orderId}`,
             "success",
@@ -453,23 +763,41 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    [pushAlert],
+    [pushAlert, recordOrderChange],
   );
 
+  /* Delta Merge Sync: fetches fresh orders and reconciles with local overrides */
   const syncNow = useCallback(async () => {
     setSyncStatus("syncing");
     setSyncError(null);
     try {
-      const orders =
+      const fetched =
         sourceMode === "sheets" && sheetUrl
           ? await fetchOrdersFromSheet(sheetUrl)
           : getMockOrders();
+
+      // Delta merge: never bluntly overwrite orders with setOrders(fetched)
+      const { mergedOrders, updatedOverrides, cleanedCount } = reconcileOrdersWithOverrides(
+        fetched,
+        overridesRef.current,
+      );
+
+      // If overrides were cleaned up because sheet caught up, save to localStorage
+      if (cleanedCount > 0) {
+        setOrderStatusOverrides(updatedOverrides);
+        saveLocalOverrides(updatedOverrides);
+      }
+
       setPublished((prev) => {
-        announceChanges(prev, orders);
-        return orders;
+        announceChanges(prev, mergedOrders);
+        return mergedOrders;
       });
-      // שומר על עריכות פתוחות בסטודיו; אחרת הטיוטה נשארת זהה לשידור
-      if (!isDirtyRef.current) setDraft(clone(orders));
+
+      // Preserve active uncommitted draft in studio
+      if (!isDirtyRef.current) {
+        setDraft(clone(mergedOrders));
+      }
+
       setLastSyncAt(new Date().toISOString());
       setSyncStatus("ok");
       failures.current = 0;
@@ -483,26 +811,83 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     }
   }, [sourceMode, sheetUrl, pushAlert, announceChanges]);
 
+  /* Manual write-back functions */
+  const syncStatusToSheet = useCallback(
+    async (orderId: string, status: OrderStatus): Promise<boolean> => {
+      try {
+        const res = await updateSheetOrderStatus({
+          orderId,
+          status,
+          webhookUrl: webhookUrlRef.current || undefined,
+          sheetName: "דשבורד_הזמנות",
+        });
+        if (res.success && res.syncedToSheet) {
+          setOrderStatusOverrides((prev) => {
+            if (!prev[orderId]) return prev;
+            const next = { ...prev, [orderId]: { ...prev[orderId], synced: true } };
+            saveLocalOverrides(next);
+            return next;
+          });
+          pushAlert(`הזמנה #${orderId} סונכרנה בהצלחה לגיליון Google Sheets`, "success");
+          return true;
+        }
+        return false;
+      } catch (err) {
+        console.warn("syncStatusToSheet error:", err);
+        return false;
+      }
+    },
+    [pushAlert],
+  );
+
+  const syncAllStatusesToSheet = useCallback(async () => {
+    const pending = Object.entries(overridesRef.current).filter(([, ov]) => !ov.synced);
+    if (pending.length === 0) {
+      pushAlert("כל הסטטוסים המקומיים כבר מסונכרנים לגיליון", "info");
+      return;
+    }
+    pushAlert(`מתחיל סנכרון של ${pending.length} הזמנות לגיליון...`, "info");
+    for (const [orderId, ov] of pending) {
+      await syncStatusToSheet(orderId, ov.status);
+    }
+  }, [syncStatusToSheet, pushAlert]);
+
+  const testSheetWriteConnection = useCallback(async () => {
+    const current = webhookUrlRef.current;
+    return await testSheetWebhookConnection(current);
+  }, []);
+
   const setSourceMode = useCallback((mode: DataSourceMode) => {
     setSourceModeState(mode);
     setSyncStatus("idle");
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(SOURCE_CONFIG_STORAGE_KEY);
       const cfg = raw ? JSON.parse(raw) : {};
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...cfg, sourceMode: mode }));
+      localStorage.setItem(SOURCE_CONFIG_STORAGE_KEY, JSON.stringify({ ...cfg, sourceMode: mode }));
     } catch {
-      /* אחסון מקומי לא זמין */
+      /* storage unavailable */
     }
   }, []);
 
   const setSheetUrl = useCallback((url: string) => {
     setSheetUrlState(url);
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(SOURCE_CONFIG_STORAGE_KEY);
       const cfg = raw ? JSON.parse(raw) : {};
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...cfg, sheetUrl: url }));
+      localStorage.setItem(SOURCE_CONFIG_STORAGE_KEY, JSON.stringify({ ...cfg, sheetUrl: url }));
     } catch {
-      /* אחסון מקומי לא זמין */
+      /* storage unavailable */
+    }
+  }, []);
+
+  const setWebhookUrl = useCallback((url: string) => {
+    setWebhookUrlState(url);
+    try {
+      const raw = localStorage.getItem(SOURCE_CONFIG_STORAGE_KEY);
+      const cfg = raw ? JSON.parse(raw) : {};
+      localStorage.setItem(SOURCE_CONFIG_STORAGE_KEY, JSON.stringify({ ...cfg, webhookUrl: url }));
+    } catch {
+      /* storage unavailable */
     }
   }, []);
 
@@ -510,33 +895,38 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     const safe = Math.min(600, Math.max(30, seconds || 45));
     setPollingSecondsState(safe);
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(SOURCE_CONFIG_STORAGE_KEY);
       const cfg = raw ? JSON.parse(raw) : {};
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...cfg, pollingSeconds: safe }));
+      localStorage.setItem(
+        SOURCE_CONFIG_STORAGE_KEY,
+        JSON.stringify({ ...cfg, pollingSeconds: safe }),
+      );
     } catch {
-      /* אחסון מקומי לא זמין */
+      /* storage unavailable */
     }
   }, []);
 
-  // טעינת הגדרות שמורות והפעלה אוטומטית של הסנכרון החי
+  // Load saved source config
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(SOURCE_CONFIG_STORAGE_KEY);
       if (!raw) return;
       const cfg = JSON.parse(raw) as Partial<{
         sourceMode: DataSourceMode;
         sheetUrl: string;
+        webhookUrl: string;
         pollingSeconds: number;
       }>;
       if (typeof cfg.sheetUrl === "string") setSheetUrlState(cfg.sheetUrl);
+      if (typeof cfg.webhookUrl === "string") setWebhookUrlState(cfg.webhookUrl);
       if (typeof cfg.pollingSeconds === "number") setPollingSecondsState(cfg.pollingSeconds);
       if (cfg.sourceMode === "mock") setSourceModeState("mock");
     } catch {
-      /* אחסון מקומי לא זמין */
+      /* storage unavailable */
     }
   }, []);
 
-  // polling — משיכה אוטומטית מהגיליון
+  // Background polling with Delta Merge
   useEffect(() => {
     if (sourceMode !== "sheets" || !sheetUrl) return;
     failures.current = 0;
@@ -553,22 +943,60 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceMode, sheetUrl, pollingSeconds]);
 
-  /* ---------------- Noa AI automatic insights ---------------- */
+  /* ---------------- Noa AI Automatic Urgency Insights ---------------- */
   useEffect(() => {
     const tick = () => {
       const now = new Date();
       published.forEach((order) => {
         if (order.status === "סופק") return;
         const mins = minutesUntil(order.targetTime, now);
-        if (mins > 0 && mins <= 30) {
+
+        if (mins <= 0) {
+          const key = `overrun-${order.orderId}`;
           setAlerts((prev) => {
-            const key = `eta-${order.orderId}`;
             if (prev.some((a) => a.id === key)) return prev;
+            const msg = `חריגה בלו״ז: הזמנה #${order.orderId} ל${order.customerName} חרגה משעת היעד (${order.targetTime})!`;
+            setLatestOrderEvent({
+              type: "status_urgent",
+              orderId: order.orderId,
+              order,
+              message: msg,
+              timestamp: Date.now(),
+            });
+            pushAlert(msg, "critical", true);
+            return [
+              {
+                id: key,
+                level: "critical",
+                message: msg,
+                createdAt: now.toISOString(),
+                isFlash: true,
+                durationMs: 11000,
+              },
+              ...prev,
+            ].slice(0, 12);
+          });
+        } else if (mins > 0 && mins <= 25) {
+          const key = `eta-${order.orderId}`;
+          setAlerts((prev) => {
+            if (prev.some((a) => a.id === key)) return prev;
+            const isUrgent = mins <= 10;
+            const msg = `נותרו ${mins} דקות ליעד — הזמנה ${order.orderId} ל${order.customerName} (${order.city})`;
+            if (isUrgent) {
+              setLatestOrderEvent({
+                type: "status_urgent",
+                orderId: order.orderId,
+                order,
+                message: msg,
+                timestamp: Date.now(),
+              });
+              pushAlert(msg, "critical", true);
+            }
             return [
               {
                 id: key,
                 level: (mins <= 15 ? "critical" : "warning") as AlertLevel,
-                message: `נותרו ${mins} דקות ליעד — הזמנה ${order.orderId} ל${order.customerName} (${order.city})`,
+                message: msg,
                 createdAt: now.toISOString(),
               },
               ...prev,
@@ -578,11 +1006,11 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       });
     };
     tick();
-    const id = setInterval(tick, 60000);
+    const id = setInterval(tick, 30000);
     return () => clearInterval(id);
-  }, [published]);
+  }, [published, pushAlert]);
 
-  /* ---------------- AI briefing generator ---------------- */
+  /* ---------------- AI Briefing Generator ---------------- */
   const generateAIBriefing = useCallback(
     async (customPrompt?: string) => {
       setIsGeneratingAI(true);
@@ -652,7 +1080,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     [aiTraining, published, pushAlert],
   );
 
-  /* ---------------- scheduled messages ticker ---------------- */
+  /* ---------------- Scheduled Messages Ticker ---------------- */
   useEffect(() => {
     const checkSchedule = () => {
       const now = new Date();
@@ -675,10 +1103,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [pushAlert]);
 
-  /* ---------------- nearest order distance & screensaver trigger ---------------- */
+  /* ---------------- Nearest Order Distance & Screensaver Trigger ---------------- */
   const nearestOrderMinutesRemaining = useMemo(() => {
     const activeOrders = published.filter((o) => o.status === "ממתין" || o.status === "בהעמסה");
-    if (activeOrders.length === 0) return 999; // No immediate order in queue
+    if (activeOrders.length === 0) return 999;
 
     const now = new Date();
     let minMinutes = Number.POSITIVE_INFINITY;
@@ -691,7 +1119,6 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     return Number.isFinite(minMinutes) ? minMinutes : 999;
   }, [published]);
 
-  // Idle and gap monitoring
   useEffect(() => {
     const onUserAction = () => {
       lastInteractionTime.current = Date.now();
@@ -719,13 +1146,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       const idleSec = Math.floor((Date.now() - lastInteractionTime.current) / 1000);
       setIdleSecondsCount(idleSec);
 
-      // Trigger condition 1: Inactivity timeout reached
       const isIdleExceeded =
         screensaverSettings.idleTimeoutSeconds > 0 &&
         idleSec >= screensaverSettings.idleTimeoutSeconds;
 
-      // Trigger condition 2: Nearest order is far beyond minimum threshold (e.g. > 45 minutes or queue is empty)
-      // and user is idle for at least 15 seconds so as not to interrupt ongoing typing
       const isOrderGapExceeded =
         screensaverSettings.minOrderGapMinutes > 0 &&
         nearestOrderMinutesRemaining !== null &&
@@ -740,7 +1164,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [screensaverSettings, nearestOrderMinutesRemaining, isScreensaverActive, isStudioOpen]);
 
-  /* ---------------- keyboard shortcuts ---------------- */
+  /* ---------------- Keyboard Shortcuts ---------------- */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && (e.key === "E" || e.key === "e")) {
@@ -760,7 +1184,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", handler);
   }, [isScreensaverActive]);
 
-  /* ---------------- derived ---------------- */
+  /* ---------------- Derived Metrics ---------------- */
   const focusOrder = useMemo(
     () => published.find((o) => o.status === "בהעמסה") ?? null,
     [published],
@@ -788,6 +1212,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     warehouses: WAREHOUSES,
     sourceMode,
     sheetUrl,
+    webhookUrl,
+    statusSyncRecords,
+    orderStatusOverrides,
+    latestOrderEvent,
     pollingSeconds,
     lastSyncAt,
     syncStatus,
@@ -800,8 +1228,11 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     selectedOrderId,
     selectOrder: setSelectedOrderId,
     updateOrder,
+    updateOrderStatus,
     setOrderStatus,
     quickUpdateStatus,
+    clearOrderStatusOverride,
+    clearAllOrderStatusOverrides,
     toggleItemApproval,
     approveAllItems,
     updateItemQuantity,
@@ -812,10 +1243,17 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     removeAlert,
     setSourceMode,
     setSheetUrl,
+    setWebhookUrl,
     setPollingSeconds,
     syncNow,
+    syncStatusToSheet,
+    syncAllStatusesToSheet,
+    testSheetWriteConnection,
     focusOrder,
     counts,
+    currentTime,
+    recentlyChangedOrderIds,
+    recordOrderChange,
     /* screensaver */
     isScreensaverActive,
     setScreensaverActive,

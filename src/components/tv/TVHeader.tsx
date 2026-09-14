@@ -84,6 +84,7 @@ export function TVHeader() {
         </button>
 
         <div
+          style={{ paddingLeft: "2px", paddingRight: "-7px" }}
           className={cn(
             "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ring-1 ring-inset",
             syncStatus === "error"

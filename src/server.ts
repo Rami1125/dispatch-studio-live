@@ -77,6 +77,8 @@ export default {
       if (url.pathname === "/api/sheets/update-status" && request.method === "POST") {
         try {
           const body = (await request.json()) as {
+            action?: string;
+            sheet?: string;
             orderId: string;
             status: string;
             webhookUrl?: string;
@@ -84,7 +86,8 @@ export default {
           };
           const { orderId, status } = body;
           const webhookUrl = body.webhookUrl || process.env.SHEETS_WEBHOOK_URL;
-          const sheetName = body.sheetName || "דשבורד_הזמנות";
+          const sheetName = body.sheet || body.sheetName || "דשבורד_הזמנות";
+          const action = body.action || "updateOrderStatus";
 
           if (!orderId || !status) {
             return new Response(
@@ -97,7 +100,13 @@ export default {
             const scriptRes = await fetch(webhookUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ orderId, status, sheetName }),
+              body: JSON.stringify({
+                action,
+                sheet: sheetName,
+                sheetName,
+                orderId,
+                status,
+              }),
               redirect: "follow",
             });
 

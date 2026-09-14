@@ -69,6 +69,22 @@ export interface StatusSyncRecord {
   message?: string;
 }
 
+export interface OrderStatusOverride {
+  status: OrderStatus;
+  timestamp: number;
+  synced: boolean;
+}
+
+export type OrderStatusOverrides = Record<string, OrderStatusOverride>;
+
+export interface OrderEvent {
+  type: "new_order" | "status_urgent" | "status_changed" | "override_synced";
+  orderId: string;
+  order?: Order;
+  message: string;
+  timestamp: number;
+}
+
 export type DataSourceMode = "mock" | "sheets";
 
 export interface DispatchState {
@@ -84,9 +100,12 @@ export interface DispatchState {
   sheetUrl: string;
   webhookUrl: string;
   statusSyncRecords: Record<string, StatusSyncRecord>;
+  orderStatusOverrides: OrderStatusOverrides;
+  latestOrderEvent: OrderEvent | null;
   pollingSeconds: number;
   lastSyncAt: string | null;
   syncStatus: "idle" | "syncing" | "ok" | "error";
   syncError: string | null;
   isDirty: boolean;
+  recentlyChangedOrderIds: Record<string, number>;
 }
