@@ -21,9 +21,13 @@ import {
   Flame,
   Film,
   AlertTriangle,
+  TrendingUp,
+  Package,
+  Share2,
+  ExternalLink,
 } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
-import { computeProductAnalytics } from "@/services/analyticsService";
+import { computeProductAnalytics, getDailyInventoryInsights } from "@/services/analyticsService";
 import { ARTERIAL_ROUTES, calculateDriverETAs } from "@/services/trafficService";
 import type { ScreensaverMode } from "@/types/screensaver";
 import { cn } from "@/lib/utils";
@@ -92,11 +96,19 @@ export function DispatchScreensaver() {
   // Compute live analytics and driver ETAs
   const analytics = useMemo(() => computeProductAnalytics(published), [published]);
   const driverETAs = useMemo(() => calculateDriverETAs(published), [published]);
+  const inventoryInsights = useMemo(() => getDailyInventoryInsights(published), [published]);
+
+  // Active inventory insight index when on STOCK_ALERT slide
+  const [activeStockIndex, setActiveStockIndex] = useState(0);
 
   // Auto-cycle through views if enabled
   useEffect(() => {
     if (!isScreensaverActive || !screensaverSettings.autoCycle) return;
-    const modes: ScreensaverMode[] = ["analytics", "traffic", "video"];
+    // Include STOCK_ALERT if there are high-demand or normal daily insights
+    const modes: ScreensaverMode[] =
+      inventoryInsights.length > 0
+        ? ["analytics", "STOCK_ALERT", "traffic", "video"]
+        : ["analytics", "traffic", "video"];
     const id = setInterval(
       () => {
         setActiveTab((prev) => {
@@ -112,6 +124,7 @@ export function DispatchScreensaver() {
     isScreensaverActive,
     screensaverSettings.autoCycle,
     screensaverSettings.cycleIntervalSeconds,
+    inventoryInsights.length,
   ]);
 
   // Video play state sync
@@ -186,6 +199,21 @@ export function DispatchScreensaver() {
             >
               <Activity className="size-4" />
               <span>ביצועים ומותגי סבן</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("STOCK_ALERT")}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition relative",
+                activeTab === "STOCK_ALERT"
+                  ? "bg-amber-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white",
+              )}
+            >
+              <AlertTriangle className="size-4 text-amber-400" />
+              <span>התראות מלאי ורכש</span>
+              {inventoryInsights.some((i) => i.alertLevel === "HIGH") && (
+                <span className="size-2 rounded-full bg-red-500 animate-ping absolute -top-1 -right-1" />
+              )}
             </button>
             <button
               onClick={() => setActiveTab("traffic")}
@@ -448,6 +476,195 @@ export function DispatchScreensaver() {
                     </div>
                   </div>
                 </div>
+              </motion.div>
+            )}
+
+            {activeTab === "STOCK_ALERT" && (
+              <motion.div
+                key="stock-alert-view"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.35 }}
+                className="h-full flex flex-col gap-5 max-w-7xl mx-auto"
+              >
+                {/* Switcher tabs among high-demand products */}
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-1.5 text-xs font-black text-amber-300 ring-1 ring-amber-500/40 animate-pulse">
+                      <Sparkles className="size-4" />
+                      <span>שקופית ניטור מלאי יומי חי</span>
+                    </span>
+                    <span className="text-sm font-bold text-slate-300">
+                      מוצרים עם צריכת יציאה גבוהה מהמגרשים היום
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {inventoryInsights.map((ins, idx) => (
+                      <button
+                        key={ins.sku}
+                        onClick={() => setActiveStockIndex(idx)}
+                        className={cn(
+                          "flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition ring-1",
+                          activeStockIndex === idx
+                            ? "bg-amber-600 text-white ring-amber-400 shadow-md shadow-amber-600/30"
+                            : "bg-slate-900 text-slate-400 ring-slate-800 hover:text-white",
+                        )}
+                      >
+                        <Package className="size-3.5" />
+                        <span>{ins.productName.split("—")[0]}</span>
+                        <span className="rounded-md bg-black/40 px-1.5 py-0.5 text-[10px] tabular-nums font-mono">
+                          {ins.todayDispensedQty} {ins.unit}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Hero Inventory Slide */}
+                {(() => {
+                  const currentInsight =
+                    inventoryInsights[activeStockIndex] || inventoryInsights[0];
+                  if (!currentInsight) return null;
+
+                  return (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch flex-1 min-h-[500px]">
+                      {/* Left Column: High-resolution product image with smooth zoom-in */}
+                      <div className="lg:col-span-5 relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl group flex flex-col justify-end">
+                        <motion.img
+                          key={currentInsight.sku}
+                          src={currentInsight.imageUrl}
+                          alt={currentInsight.productName}
+                          initial={{ scale: 1.08, opacity: 0.8 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ duration: 1.4, ease: "easeOut" }}
+                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-1000 group-hover:scale-105"
+                        />
+                        {/* Gradient overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+
+                        {/* Top floating badge */}
+                        <div className="absolute top-5 right-5 z-10">
+                          <span className="flex items-center gap-2 rounded-2xl bg-amber-500/90 px-4 py-2 text-sm font-black text-slate-950 shadow-xl backdrop-blur-md">
+                            <TrendingUp className="size-4" />
+                            <span>
+                              יצאו היום: {currentInsight.todayDispensedQty} {currentInsight.unit}
+                            </span>
+                          </span>
+                        </div>
+
+                        {/* Bottom image details */}
+                        <div className="relative z-10 p-6 space-y-2">
+                          <span className="inline-block rounded-lg bg-black/60 px-3 py-1 font-mono text-xs font-bold text-amber-300 backdrop-blur-md border border-amber-400/30">
+                            מק"ט {currentInsight.sku}
+                          </span>
+                          <h3 className="text-2xl font-black text-white drop-shadow-md">
+                            {currentInsight.productName}
+                          </h3>
+                        </div>
+                      </div>
+
+                      {/* Right Column: Alert details and smart reorder recommendation */}
+                      <div className="lg:col-span-7 flex flex-col justify-between rounded-3xl border border-slate-800/80 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-md">
+                        <div className="space-y-6">
+                          {/* Header */}
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                            <div className="flex items-center gap-3 text-amber-400">
+                              <div className="grid size-12 place-items-center rounded-2xl bg-amber-500/20 ring-1 ring-amber-500/30">
+                                <AlertTriangle className="size-6 text-amber-400 animate-bounce" />
+                              </div>
+                              <div>
+                                <h2 className="text-2xl font-black tracking-tight text-white">
+                                  ⚠️ התראת מלאי יומי — {currentInsight.warehouseName}
+                                </h2>
+                                <p className="text-xs text-slate-400">
+                                  חישוב ביקושים אוטומטי מבוסס תנועות אמת מהחצר
+                                </p>
+                              </div>
+                            </div>
+
+                            <span
+                              className={cn(
+                                "rounded-full px-4 py-1 text-xs font-black ring-1",
+                                currentInsight.alertLevel === "HIGH"
+                                  ? "bg-red-500/20 text-red-400 ring-red-500/40 animate-pulse"
+                                  : "bg-amber-500/20 text-amber-300 ring-amber-500/40",
+                              )}
+                            >
+                              {currentInsight.alertLevel === "HIGH"
+                                ? "דרישת רכש דחופה"
+                                : "ניטור פעיל"}
+                            </span>
+                          </div>
+
+                          {/* SKU & Official Product Name */}
+                          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                            <div className="text-xs font-semibold text-slate-400">
+                              זיהוי מק״ט ומוצר רשמי:
+                            </div>
+                            <div className="text-lg font-black text-white mt-1">
+                              מק"ט: {currentInsight.sku} | {currentInsight.productName}
+                            </div>
+                          </div>
+
+                          {/* Total Dispensed Today Counter */}
+                          <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5 flex items-center justify-between">
+                            <div>
+                              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                סך הכל יצא מהמגרש היום:
+                              </div>
+                              <div className="text-5xl font-black text-white tabular-nums tracking-tight mt-1 flex items-baseline gap-3">
+                                <span>{currentInsight.todayDispensedQty}</span>
+                                <span className="text-xl font-bold text-amber-400">
+                                  {currentInsight.unit}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-left text-xs text-slate-400 max-w-[200px]">
+                              נמסר או נמצא כעת בהעמסה על גבי משאיות חלוקה פעילות
+                            </div>
+                          </div>
+
+                          {/* Smart Reorder Recommendation Box (Green Background) */}
+                          <div className="rounded-2xl border border-emerald-500/40 bg-emerald-950/40 p-5 shadow-lg shadow-emerald-950/30">
+                            <div className="flex items-center gap-2 text-emerald-400 text-xs font-black mb-2">
+                              <Sparkles className="size-4" />
+                              <span>המלצת רכש חכמה (Noa Burn-Rate AI):</span>
+                            </div>
+                            <div className="text-2xl font-black text-emerald-300">
+                              להזמין {currentInsight.recommendedUnitsText}
+                            </div>
+                            <p className="mt-2 text-xs text-emerald-200/90 leading-relaxed">
+                              {currentInsight.explanation}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Footer Notice */}
+                        <div className="mt-6 flex items-center justify-between rounded-2xl border border-slate-800 bg-blue-950/30 p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="grid size-10 place-items-center rounded-xl bg-blue-600/30 text-blue-300 ring-1 ring-blue-500/30">
+                              <Share2 className="size-5" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-white">
+                                אורן, שלח דרישה בלחיצת כפתור לנתנאל דרך מסוף הליקוט במובייל 📲
+                              </div>
+                              <div className="text-xs text-slate-400">
+                                שליחה ישירה לווצאפ עם פירוט משטחים ובלות ללא צורך בהקלדה ידנית
+                              </div>
+                            </div>
+                          </div>
+
+                          <span className="text-xs font-mono font-bold text-blue-400 bg-blue-900/40 px-3 py-1.5 rounded-lg border border-blue-800">
+                            מחסן 4 החרש
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </motion.div>
             )}
 

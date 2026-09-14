@@ -1,4 +1,18 @@
-export type ScreensaverMode = "analytics" | "traffic" | "video" | "mixed";
+export type ScreensaverMode = "analytics" | "traffic" | "video" | "mixed" | "STOCK_ALERT";
+
+export interface DailyInventoryInsight {
+  sku: string;
+  productName: string;
+  todayDispensedQty: number;
+  unit: string;
+  recommendedReorderQty: number;
+  recommendedUnitsText: string;
+  explanation: string;
+  imageUrl: string;
+  alertLevel: "HIGH" | "NORMAL";
+  bannerText: string;
+  warehouseName: string;
+}
 
 export interface ScheduledBroadcast {
   id: string;

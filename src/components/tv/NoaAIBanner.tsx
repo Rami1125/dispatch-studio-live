@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Bot, CheckCircle2, Info, Siren } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, Info, Siren, Sparkles } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
+import { getDailyInventoryInsights } from "@/services/analyticsService";
 import type { AlertLevel, NoaAlert } from "@/types/dispatch";
 import { cn } from "@/lib/utils";
 
@@ -78,6 +79,17 @@ export function NoaAIBanner() {
       createdAt: new Date().toISOString(),
     });
 
+    // Dynamic Outbound Inventory Insights
+    const inventoryInsights = getDailyInventoryInsights(published);
+    inventoryInsights.forEach((ins) => {
+      list.push({
+        id: `inventory-insight-${ins.sku}`,
+        level: ins.alertLevel === "HIGH" ? "warning" : "info",
+        message: ins.bannerText,
+        createdAt: new Date().toISOString(),
+      });
+    });
+
     return list;
   }, [published, warehouses, targetedBriefings]);
 
@@ -112,6 +124,12 @@ export function NoaAIBanner() {
             )}
           >
             <LevelIcon level={current.level} />
+            {current.id.startsWith("inventory-insight-") && (
+              <span className="shrink-0 flex items-center gap-1 rounded-lg bg-amber-500/20 px-2.5 py-1 text-xs font-black text-amber-300 ring-1 ring-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.35)] animate-pulse">
+                <Sparkles className="size-3.5" />
+                <span>תובנת מלאי יומית</span>
+              </span>
+            )}
             <span className="truncate">{current.message}</span>
           </motion.div>
         </AnimatePresence>
