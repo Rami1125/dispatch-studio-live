@@ -323,7 +323,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
       }>;
       if (typeof cfg.sheetUrl === "string") setSheetUrlState(cfg.sheetUrl);
       if (typeof cfg.pollingSeconds === "number") setPollingSecondsState(cfg.pollingSeconds);
-      if (cfg.sourceMode === "sheets" && cfg.sheetUrl) setSourceModeState("sheets");
+      if (cfg.sourceMode === "mock") setSourceModeState("mock");
     } catch {
       /* אחסון מקומי לא זמין */
     }
