@@ -229,9 +229,14 @@ export function parseOrdersCsv(csv: string): Order[] {
   if (lines.length < 2) return [];
 
   const headers = parseCsvLine(lines[0] ?? "").map((h) => h.replace(/^"|"$/g, "").trim());
+  // התאמה מדויקת ואם אין — התאמה חלקית (כותרות כמו "שקי בלה (60002)")
   const idx = (...names: string[]) => {
     for (const n of names) {
       const i = headers.findIndex((h) => h === n);
+      if (i >= 0) return i;
+    }
+    for (const n of names) {
+      const i = headers.findIndex((h) => h.includes(n));
       if (i >= 0) return i;
     }
     return -1;
