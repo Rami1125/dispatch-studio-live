@@ -249,7 +249,9 @@ export function UrgentDeliveriesTicker() {
   const marqueeDurationSeconds = Math.max(16, Math.round(42 / speedMultiplier));
 
   if (!hasMounted) {
-    return <section aria-hidden="true" className="h-12 rounded-2xl border border-border/70 bg-card/70" />;
+    return (
+      <section aria-hidden="true" className="h-12 rounded-2xl border border-border/70 bg-card/70" />
+    );
   }
 
   if (allUrgentItems.length === 0) {

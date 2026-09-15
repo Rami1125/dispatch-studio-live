@@ -31,6 +31,8 @@ import {
   ExternalLink,
   X,
   TrendingUp,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import type { Order, OrderStatus } from "@/types/dispatch";
@@ -46,11 +48,71 @@ import {
 } from "@/utils/soundEffects";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/hooks/useTheme";
 
 export type PickerProfile = "oren" | "tamir" | "all";
 
 interface PickerViewProps {
   onSwitchToTv?: () => void;
+}
+
+function LiveKpiBanner({ orders }: { orders: Order[] }) {
+  const [isOpen, setIsOpen] = useState(true);
+  const bales = orders.reduce((sum, order) => sum + order.logisticsMetrics.bellaBags, 0);
+  const pallets = orders.reduce((sum, order) => sum + order.logisticsMetrics.sabanPallets, 0);
+  const active = orders.filter(
+    (order) => order.status === "ממתין" || order.status === "בהכנה",
+  ).length;
+  const loadReady = orders.filter(
+    (order) => order.status === "מוכן להעמסה" || order.status === "בהעמסה",
+  ).length;
+
+  return (
+    <section
+      className="overflow-hidden rounded-2xl border border-sky-500/30 bg-sky-950/30 shadow-sm"
+      aria-label="מדדי מחסן חיים"
+    >
+      <button
+        type="button"
+        onClick={() => setIsOpen((value) => !value)}
+        aria-expanded={isOpen}
+        className="flex min-h-12 w-full items-center justify-between gap-3 px-3 py-2 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+      >
+        <span className="flex items-center gap-2 text-sm font-black text-sky-100">
+          <TrendingUp aria-hidden="true" /> מדדי משמרת חיים
+        </span>
+        <span className="text-xs font-bold text-sky-300">{isOpen ? "צמצום" : "הצגה"}</span>
+      </button>
+      {isOpen && (
+        <div className="grid grid-cols-2 gap-2 border-t border-sky-500/20 p-3 sm:grid-cols-4">
+          <div className="rounded-xl bg-background/60 p-2">
+            <div className="text-xl font-black tabular-nums text-foreground">{bales}</div>
+            <div className="text-[11px] font-bold text-muted-foreground">בלות · 60002</div>
+          </div>
+          <div className="rounded-xl bg-background/60 p-2">
+            <div className="text-xl font-black tabular-nums text-foreground">{pallets}</div>
+            <div className="text-[11px] font-bold text-muted-foreground">משטחים · 60060</div>
+          </div>
+          <div
+            className={cn("rounded-xl p-2", active > 0 ? "bg-amber-500/15" : "bg-background/60")}
+          >
+            <div className="text-xl font-black tabular-nums text-foreground">
+              {active ? "20 דק׳" : "—"}
+            </div>
+            <div className="text-[11px] font-bold text-muted-foreground">SLA ליקוט</div>
+          </div>
+          <div
+            className={cn("rounded-xl p-2", loadReady > 0 ? "bg-rose-500/15" : "bg-background/60")}
+          >
+            <div className="text-xl font-black tabular-nums text-foreground">
+              {loadReady ? "15 דק׳" : "—"}
+            </div>
+            <div className="text-[11px] font-bold text-muted-foreground">SLA העמסה</div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 
 export function PickerView({ onSwitchToTv }: PickerViewProps) {
@@ -68,11 +130,19 @@ export function PickerView({ onSwitchToTv }: PickerViewProps) {
   } = useDispatchBoard();
 
   const [selectedProfile, setSelectedProfile] = useState<PickerProfile>("oren");
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const pickerParam = urlParams.get("picker");
+      const warehouseParam = urlParams.get("warehouse");
+      const warehousePicker =
+        warehouseParam === "4" ? "oren" : warehouseParam === "1" ? "tamir" : null;
+      if (warehousePicker) {
+        setSelectedProfile(warehousePicker);
+        return;
+      }
       if (pickerParam === "oren" || pickerParam === "tamir" || pickerParam === "all") {
         setSelectedProfile(pickerParam);
         return;
@@ -132,24 +202,19 @@ export function PickerView({ onSwitchToTv }: PickerViewProps) {
     setExpandedOrderIds((prev) => ({ ...prev, [orderId]: !prev[orderId] }));
   };
 
-  // Filter orders according to picker branch
+  const warehouseMatchesProfile = (warehouse: string, profile: PickerProfile) => {
+    const value = warehouse.trim().toLowerCase();
+    if (!value) return false;
+    if (profile === "oren") return /סניף\s*4|מחסן\s*4|החורש|החרש/.test(value);
+    if (profile === "tamir") return /סניף\s*1|מחסן\s*1|התלמיד/.test(value);
+    return true;
+  };
+
+  // Warehouse-specific views intentionally exclude blank, ambiguous, and unknown warehouses.
   const filteredOrders = useMemo(() => {
     return published.filter((order) => {
-      // Branch filter
-      if (selectedProfile === "oren") {
-        // Oren: Branch 4 HaHoresh
-        const matchBranch = /סניף 4|מחסן 4|החורש|חורש/i.test(order.warehouse);
-        if (!matchBranch && order.warehouse.trim() !== "") {
-          // If orders don't have explicit warehouse 4, allow display if not explicitly warehouse 1/30
-          if (/סניף 1|מחסן 1|מחסן 30|התלמיד/i.test(order.warehouse)) return false;
-        }
-      } else if (selectedProfile === "tamir") {
-        // Tamir: Branch 1 HaTalmid
-        const matchBranch = /סניף 1|מחסן 1|מחסן 30|התלמיד|תלמיד/i.test(order.warehouse);
-        if (!matchBranch && order.warehouse.trim() !== "") {
-          if (/סניף 4|מחסן 4|החורש/i.test(order.warehouse)) return false;
-        }
-      }
+      if (selectedProfile !== "all" && !warehouseMatchesProfile(order.warehouse, selectedProfile))
+        return false;
 
       // Status filter
       if (statusFilter === "active") {
@@ -181,12 +246,8 @@ export function PickerView({ onSwitchToTv }: PickerViewProps) {
     let completed = 0;
 
     published.forEach((o) => {
-      if (selectedProfile === "oren" && /סניף 1|מחסן 1|מחסן 30|התלמיד/i.test(o.warehouse)) {
+      if (selectedProfile !== "all" && !warehouseMatchesProfile(o.warehouse, selectedProfile))
         return;
-      }
-      if (selectedProfile === "tamir" && /סניף 4|מחסן 4|החורש/i.test(o.warehouse)) {
-        return;
-      }
 
       if (o.status === "ממתין" || o.status === "בהכנה") active++;
       else if (o.status === "מוכן להעמסה" || o.status === "בהעמסה") ready++;
@@ -216,10 +277,19 @@ export function PickerView({ onSwitchToTv }: PickerViewProps) {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "עבור למצב בהיר" : "עבור למצב כהה"}
+              title={theme === "dark" ? "מצב בהיר" : "מצב כהה"}
+              className="flex size-11 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-amber-300 transition hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+            >
+              {theme === "dark" ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+            </button>
             {/* Audio Mute Toggle */}
             <button
               onClick={() => toggleAudioMute()}
-              title={isMuted ? "בטל השתקת צלילים" : "השתק צלילים"}
+              title={isMuted ? "בטל השתקת צלילים" : "השתק צליל��ם"}
               className={cn(
                 "p-2 rounded-lg border transition-colors flex items-center justify-center",
                 isMuted
@@ -424,6 +494,9 @@ export function PickerView({ onSwitchToTv }: PickerViewProps) {
             </button>
           </div>
         </div>
+
+        {/* Live inventory and SLA summary */}
+        <LiveKpiBanner orders={filteredOrders} />
 
         {/* Inventory Demand & 1-Click WhatsApp Reorder to Netanel */}
         <InventoryDemandCard
@@ -1058,7 +1131,7 @@ function PickerOrderCard({
               <option value="בהכנה">בהכנה (ליקוט פעיל)</option>
               <option value="מוכן להעמסה">מוכן להעמסה</option>
               <option value="בהעמסה">בהעמסה</option>
-              <option value="יצא לדרך">יצא לדרך</option>
+              <option value="יצא לדר��">יצא לדרך</option>
               <option value="סופק">סופק</option>
             </select>
           </div>
