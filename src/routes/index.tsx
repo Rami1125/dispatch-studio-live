@@ -132,10 +132,7 @@ function LiveBoard() {
   }
 
   return (
-    <div
-      dir="rtl"
-      className="flex min-h-screen w-screen flex-col gap-2.5 bg-background p-3"
-    >
+    <div dir="rtl" className="flex min-h-screen w-screen flex-col gap-2.5 bg-background p-3">
       <UrgentDeliveriesTicker />
       <TVHeader
         onSwitchToPicker={() => handleSetViewMode("picker")}

@@ -13,7 +13,7 @@ import {
   Warehouse,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import type { Order, OrderStatus } from "@/types/dispatch";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -24,6 +24,11 @@ const ALL_STATUSES: OrderStatus[] = ["ממתין", "בהכנה", "מוכן לה�
 export function OrderCard({ order, index = 0 }: { order: Order; index?: number }) {
   const { currentTime, recentlyChangedOrderIds, quickUpdateStatus } = useDispatchBoard();
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const approved = order.items.filter((i) => i.isApproved).length;
   const total = order.items.length;
@@ -64,11 +69,12 @@ export function OrderCard({ order, index = 0 }: { order: Order; index?: number }
     recentlyChangedOrderIds[order.orderId] ||
     (order.updatedAt ? new Date(order.updatedAt).getTime() : 0);
   const timeSinceChangeMs = currentTime.getTime() - lastChangeTimestamp;
-  const isRecentlyChanged = lastChangeTimestamp > 0 && timeSinceChangeMs < 50_000;
+  const isRecentlyChanged = isMounted && lastChangeTimestamp > 0 && timeSinceChangeMs < 50_000;
   const secondsSinceChange = Math.max(0, Math.floor(timeSinceChangeMs / 1000));
 
   /* ---------------- 2. Condition: Delayed Status / Schedule Overrun (עיכוב בשינוי סטטוס) ---------------- */
   const isDelayed =
+    isMounted &&
     order.status !== "סופק" &&
     (diffMinutes <= 0 ||
       (order.status === "ממתין" && diffMinutes <= 15) ||
@@ -76,21 +82,26 @@ export function OrderCard({ order, index = 0 }: { order: Order; index?: number }
 
   /* ---------------- 3. Condition: Approaching Delivery (מתקרב מועד אספקה) ---------------- */
   const isApproaching =
-    order.status !== "סופק" && !isDelayed && diffMinutes > 0 && diffMinutes <= 40;
+    isMounted && order.status !== "סופק" && !isDelayed && diffMinutes > 0 && diffMinutes <= 40;
 
   /* ---------------- Primary Alert Hierarchy ---------------- */
   // Priority: Delayed (Rose) > Approaching (Amber) > Recently Changed (Blue)
   type AlertKind = "delayed" | "approaching" | "changed" | null;
-  const primaryAlert: AlertKind = isDelayed
-    ? "delayed"
-    : isApproaching
-      ? "approaching"
-      : isRecentlyChanged
-        ? "changed"
-        : null;
+  const primaryAlert: AlertKind = !isMounted
+    ? null
+    : isDelayed
+      ? "delayed"
+      : isApproaching
+        ? "approaching"
+        : isRecentlyChanged
+          ? "changed"
+          : null;
 
-  const pulseClass =
-    primaryAlert === "delayed"
+  const pulseClass = !isMounted
+    ? order.status === "בהעמסה"
+      ? "border-accent/60 ring-2 ring-accent/30 shadow-sm"
+      : "border-border/80 shadow-sm"
+    : primaryAlert === "delayed"
       ? "animate-gentle-pulse-rose border-rose-500/70 shadow-[0_0_20px_-2px_rgba(244,63,94,0.32)] ring-1 ring-rose-500/40"
       : primaryAlert === "approaching"
         ? "animate-gentle-pulse-amber border-amber-500/70 shadow-[0_0_18px_-2px_rgba(245,158,11,0.28)] ring-1 ring-amber-500/40"

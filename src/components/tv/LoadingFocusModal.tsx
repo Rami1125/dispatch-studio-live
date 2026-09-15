@@ -41,17 +41,19 @@ export function LoadingFocusModal({ order }: { order: Order | null }) {
     recentlyChangedOrderIds[order.orderId] ||
     (order.updatedAt ? new Date(order.updatedAt).getTime() : 0);
   const isRecentlyChanged =
-    lastChangeTimestamp > 0 && currentTime.getTime() - lastChangeTimestamp < 45_000;
-  const isDelayed = diffMinutes <= 0;
-  const isApproaching = !isDelayed && diffMinutes <= 40;
+    isMounted && lastChangeTimestamp > 0 && currentTime.getTime() - lastChangeTimestamp < 45_000;
+  const isDelayed = isMounted && diffMinutes <= 0;
+  const isApproaching = isMounted && !isDelayed && diffMinutes <= 40;
 
-  const pulseClass = isDelayed
-    ? "animate-gentle-pulse-rose border-rose-500 ring-4 ring-rose-500/30"
-    : isApproaching
-      ? "animate-gentle-pulse-amber border-amber-500 ring-4 ring-amber-500/30"
-      : isRecentlyChanged
-        ? "animate-gentle-pulse-blue border-sky-500 ring-4 ring-sky-500/30"
-        : "border-accent/50 ring-4 ring-accent/10";
+  const pulseClass = !isMounted
+    ? "border-accent/50 ring-4 ring-accent/10"
+    : isDelayed
+      ? "animate-gentle-pulse-rose border-rose-500 ring-4 ring-rose-500/30"
+      : isApproaching
+        ? "animate-gentle-pulse-amber border-amber-500 ring-4 ring-amber-500/30"
+        : isRecentlyChanged
+          ? "animate-gentle-pulse-blue border-sky-500 ring-4 ring-sky-500/30"
+          : "border-accent/50 ring-4 ring-accent/10";
 
   return (
     <AnimatePresence mode="wait">
@@ -92,8 +94,7 @@ export function LoadingFocusModal({ order }: { order: Order | null }) {
                     )}
                     {isApproaching && !isDelayed && (
                       <span>
-                        <Flame className="mr-0.5 inline size-3" /> מועד קרוב: עוד{" "}
-                        {isMounted ? diffMinutes : 15} דק׳
+                        <Flame className="mr-0.5 inline size-3" /> מועד קרוב: עוד {diffMinutes} דק׳
                       </span>
                     )}
                     {isRecentlyChanged && !isDelayed && !isApproaching && (
