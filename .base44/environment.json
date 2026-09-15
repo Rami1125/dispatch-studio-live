@@ -1,0 +1,17 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "GEMINI_API_KEY",
+      "description": "Google Gemini API key for the 'Noa AI' server-side insight generation. Get it from https://aistudio.google.com/apikey. Without it, the app boots fine but AI insights fall back to local heuristics.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "SHEETS_WEBHOOK_URL",
+      "description": "Google Apps Script Web App URL for syncing order statuses back to the 'דשבורד_הזמנות' Google Sheet. Optional — without it, status updates stay in-memory only.",
+      "requiredAtBoot": false
+    }
+  ]
+}

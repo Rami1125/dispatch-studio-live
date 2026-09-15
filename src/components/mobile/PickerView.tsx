@@ -260,7 +260,7 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
   }, [published, selectedProfile]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-24 selection:bg-amber-500 selection:text-slate-950">
+    <div className="min-h-screen overflow-x-hidden bg-slate-950 text-slate-100 font-sans pb-24 selection:bg-amber-500 selection:text-slate-950">
       {/* Top Mobile Bar */}
       <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 shadow-md">
         <div className="flex items-center justify-between gap-2 max-w-2xl mx-auto">

@@ -14,6 +14,15 @@ import { PickerView } from "@/components/mobile/PickerView";
 import { TrafficLiveDashboard } from "@/components/traffic/TrafficLiveDashboard";
 import type { Order } from "@/types/dispatch";
 
+/** Detects mobile or touch-only devices (no fine pointer / narrow viewport). */
+function isMobileDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  const hasFinePointer = window.matchMedia?.("(pointer: fine)").matches ?? true;
+  const isNarrow = window.innerWidth < 768;
+  return isNarrow || (isTouch && !hasFinePointer);
+}
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -86,7 +95,7 @@ function LiveBoard() {
         return;
       }
 
-      if (window.innerWidth < 768) {
+      if (isMobileDevice()) {
         setViewMode("picker");
       }
     }
@@ -112,25 +121,12 @@ function LiveBoard() {
   }, [published]);
 
   if (viewMode === "picker") {
+    // ── Hermetic mobile boundary ──────────────────────────────────
+    // Mobile/picker renders ONLY PickerView — no screensaver, no studio
+    // drawer, no flash overlays, no traffic modals, no TV boards.
     return (
       <div dir="rtl" className="min-h-screen bg-slate-950">
-        <PickerView
-          onSwitchToTv={() => handleSetViewMode("tv")}
-          onOpenTraffic={() => setIsTrafficOpen(true)}
-        />
-        <StudioDrawer />
-        <NoaFlashOverlay />
-
-        {/* Traffic Live Modal for Picker if opened */}
-        <AnimatePresence>
-          {isTrafficOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-md">
-              <div className="w-full max-w-6xl max-h-[95vh] overflow-hidden">
-                <TrafficLiveDashboard onClose={() => setIsTrafficOpen(false)} isModal />
-              </div>
-            </div>
-          )}
-        </AnimatePresence>
+        <PickerView onSwitchToTv={() => handleSetViewMode("tv")} />
       </div>
     );
   }
