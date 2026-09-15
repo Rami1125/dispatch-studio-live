@@ -134,7 +134,7 @@ function LiveBoard() {
   return (
     <div
       dir="rtl"
-      className="flex h-screen w-screen flex-col gap-2.5 overflow-hidden bg-background p-3"
+      className="flex min-h-screen w-screen flex-col gap-2.5 bg-background p-3"
     >
       <UrgentDeliveriesTicker />
       <TVHeader

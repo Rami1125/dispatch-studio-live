@@ -154,7 +154,12 @@
   html,
   body {
     font-family: var(--font-sans);
-    overflow: hidden;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-y !important;
   }
 
   ::-webkit-scrollbar {

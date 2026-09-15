@@ -594,7 +594,7 @@ export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
       {/* Share / Direct Links Modal */}
       {showShareModal && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl relative">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto p-5 space-y-4 shadow-2xl relative">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className="size-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center">
