@@ -7,14 +7,17 @@ import {
   Maximize2,
   Minimize2,
   Navigation,
+  Plus,
   RefreshCw,
+  ShieldAlert,
 } from "lucide-react";
-import type { LocationPreset } from "@/types/traffic";
+import type { LocationPreset, WarehouseAlertPin } from "@/types/traffic";
 import {
   LOCATION_PRESETS,
   buildWazeEmbedUrl,
   buildWazeNavigationUrl,
 } from "@/services/trafficService";
+import { ALERT_PIN_CATEGORIES } from "@/services/alertPinService";
 import { cn } from "@/lib/utils";
 
 interface WazeMapEmbedProps {
@@ -23,6 +26,9 @@ interface WazeMapEmbedProps {
   customPresets?: LocationPreset[];
   className?: string;
   heightClass?: string;
+  alertPins?: WarehouseAlertPin[];
+  onOpenAddPinModal?: () => void;
+  onSelectAlertPin?: (pin: WarehouseAlertPin) => void;
 }
 
 export function WazeMapEmbed({
@@ -31,6 +37,9 @@ export function WazeMapEmbed({
   customPresets,
   className,
   heightClass = "h-[440px] md:h-[500px]",
+  alertPins = [],
+  onOpenAddPinModal,
+  onSelectAlertPin,
 }: WazeMapEmbedProps) {
   const allPresets = useMemo(() => {
     if (!customPresets || customPresets.length === 0) return LOCATION_PRESETS;
@@ -41,6 +50,7 @@ export function WazeMapEmbed({
   const [isLoading, setIsLoading] = useState(true);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showAlertPinsOverlay, setShowAlertPinsOverlay] = useState(true);
 
   const activePreset = externalPreset || internalPreset;
 

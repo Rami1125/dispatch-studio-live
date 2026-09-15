@@ -25,6 +25,32 @@ export interface LocationPreset {
   pinText?: string;
 }
 
+export type AlertPinCategory =
+  | "bottleneck" // צוואר בקבוק / פקק
+  | "blockage" // חסימת ציר / כביש סגור
+  | "police" // משטרה / פיקוח
+  | "loading_bay" // חסימת רציף פריקה / שער
+  | "roadworks" // עבודות בכביש / סלילה
+  | "hazard"; // מפגע / בור / שמן
+
+export interface WarehouseAlertPin {
+  id: string;
+  title: string;
+  category: AlertPinCategory;
+  categoryLabel: string;
+  severity: TrafficSeverity;
+  lat: number;
+  lon: number;
+  zoom?: number;
+  locationName: string; // e.g., "צומת החרש - התלמיד", "כניסה לשער 2", "רמזור רחוב החרש"
+  description: string;
+  createdBy: string; // e.g., "ראמי סבן (מנהל)"
+  createdAt: number; // timestamp
+  expiresAt?: number; // timestamp (optional auto-expiry)
+  affectedRoutes?: string; // e.g., "גישה למחסן 4, פריקת מלט"
+  isWarehousePeriphery: boolean;
+}
+
 export interface TruckRouteInfo {
   id: "hikmat" | "ali";
   driverName: string;

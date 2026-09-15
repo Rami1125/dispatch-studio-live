@@ -508,10 +508,46 @@ export function toCsvUrl(url: string, sheetName = "דשבורד_הזמנות"): 
 }
 
 export async function fetchOrdersFromSheet(url: string, signal?: AbortSignal): Promise<Order[]> {
-  const target = url.includes("output=csv") || url.includes("out:csv") ? url : toCsvUrl(url);
-  const res = await fetch(target, { cache: "no-store", signal });
-  if (!res.ok) throw new Error(`שגיאת גיליון: ${res.status}`);
-  const csv = await res.text();
+  const baseTarget = url.includes("output=csv") || url.includes("out:csv") ? url : toCsvUrl(url);
+  const sep = baseTarget.includes("?") ? "&" : "?";
+  // Add unique timestamp query parameter to defeat Google Docs aggressive edge cache
+  const directTarget = `${baseTarget}${sep}_t=${Date.now()}`;
+
+  let csv = "";
+  try {
+    const res = await fetch(directTarget, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+      signal,
+    });
+    if (res.ok) {
+      csv = await res.text();
+    } else {
+      throw new Error(`Direct sheet response status: ${res.status}`);
+    }
+  } catch (directErr) {
+    // Fallback: proxy via local server endpoint /api/sheets/orders (handles CORS & offline network blocks)
+    try {
+      const proxyUrl = `/api/sheets/orders?url=${encodeURIComponent(baseTarget)}`;
+      const proxyRes = await fetch(proxyUrl, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+        signal,
+      });
+      if (!proxyRes.ok) {
+        throw new Error(`Proxy error: ${proxyRes.status}`);
+      }
+      csv = await proxyRes.text();
+    } catch (proxyErr) {
+      throw new Error(
+        `שגיאת גיליון: ${directErr instanceof Error ? directErr.message : "נכשל חיבור ישיר"} (${proxyErr instanceof Error ? proxyErr.message : "וגם שרת הפרוקסי נכשל"})`,
+      );
+    }
+  }
+
   const orders = parseOrdersCsv(csv);
   if (orders.length === 0) throw new Error("לא נמצאו שורות בגיליון דשבורד_הזמנות");
   return orders;

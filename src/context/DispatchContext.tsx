@@ -34,6 +34,7 @@ import {
   testSheetWebhookConnection,
 } from "@/services/sheetsService";
 import { fetchOrdersWithResilience } from "@/services/sheetsSyncService";
+import { calculateLiveInventory, type LiveInventorySummary } from "@/services/inventoryService";
 import {
   playNewOrderSound,
   playSuccessSound,
@@ -253,6 +254,11 @@ interface DispatchContextValue extends DispatchState {
   recentlyChangedOrderIds: Record<string, number>;
   recordOrderChange: (orderId: string) => void;
 
+  /* automated real-time inventory */
+  liveInventory: LiveInventorySummary;
+  activeWarehouseFilter: 1 | 4 | "all";
+  setActiveWarehouseFilter: (wh: 1 | 4 | "all") => void;
+
   /* picker workflow */
   startPicking: (orderId: string, pickerName?: string) => void;
   finishPicking: (orderId: string) => void;
@@ -301,11 +307,18 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   const webhookUrlRef = useRef(webhookUrl);
   webhookUrlRef.current = webhookUrl;
 
-  const [pollingSeconds, setPollingSecondsState] = useState(45);
+  const [pollingSeconds, setPollingSecondsState] = useState(15);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<DispatchState["syncStatus"]>("idle");
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+
+  /* ---------------- Automated Real-Time Inventory State ---------------- */
+  const [activeWarehouseFilter, setActiveWarehouseFilter] = useState<1 | 4 | "all">("all");
+
+  const liveInventory = useMemo<LiveInventorySummary>(() => {
+    return calculateLiveInventory(published, activeWarehouseFilter);
+  }, [published, activeWarehouseFilter]);
 
   /* ---------------- Browser Speech Synthesis Voice Alerts ---------------- */
   const [voiceAnnounceEnabled, setVoiceAnnounceEnabledState] = useState(() =>
@@ -1007,49 +1020,52 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   );
 
   /* Delta Merge Sync: fetches fresh orders and reconciles with local overrides */
-  const syncNow = useCallback(async () => {
-    setSyncStatus("syncing");
-    setSyncError(null);
-    try {
-      const fetched =
-        sourceMode === "sheets" && sheetUrl
-          ? await fetchOrdersWithResilience(sheetUrl)
-          : getMockOrders();
+  const syncNow = useCallback(
+    async (force = false) => {
+      setSyncStatus("syncing");
+      setSyncError(null);
+      try {
+        const fetched =
+          sourceMode === "sheets" && sheetUrl
+            ? await fetchOrdersWithResilience(sheetUrl, undefined, force)
+            : getMockOrders();
 
-      // Delta merge: never bluntly overwrite orders with setOrders(fetched)
-      const { mergedOrders, updatedOverrides, cleanedCount } = reconcileOrdersWithOverrides(
-        fetched,
-        overridesRef.current,
-      );
+        // Delta merge: never bluntly overwrite orders with setOrders(fetched)
+        const { mergedOrders, updatedOverrides, cleanedCount } = reconcileOrdersWithOverrides(
+          fetched,
+          overridesRef.current,
+        );
 
-      // If overrides were cleaned up because sheet caught up, save to localStorage
-      if (cleanedCount > 0) {
-        setOrderStatusOverrides(updatedOverrides);
-        saveLocalOverrides(updatedOverrides);
+        // If overrides were cleaned up because sheet caught up, save to localStorage
+        if (cleanedCount > 0) {
+          setOrderStatusOverrides(updatedOverrides);
+          saveLocalOverrides(updatedOverrides);
+        }
+
+        setPublished((prev) => {
+          announceChanges(prev, mergedOrders);
+          return mergedOrders;
+        });
+
+        // Preserve active uncommitted draft in studio
+        if (!isDirtyRef.current) {
+          setDraft(clone(mergedOrders));
+        }
+
+        setLastSyncAt(new Date().toISOString());
+        setSyncStatus("ok");
+        failures.current = 0;
+      } catch (err) {
+        failures.current += 1;
+        setSyncStatus("error");
+        setSyncError(err instanceof Error ? err.message : "שגיאת סנכרון לא ידועה");
+        if (failures.current <= 2) {
+          pushAlert("הסנכרון מול גיליון דשבורד_הזמנות נכשל", "critical");
+        }
       }
-
-      setPublished((prev) => {
-        announceChanges(prev, mergedOrders);
-        return mergedOrders;
-      });
-
-      // Preserve active uncommitted draft in studio
-      if (!isDirtyRef.current) {
-        setDraft(clone(mergedOrders));
-      }
-
-      setLastSyncAt(new Date().toISOString());
-      setSyncStatus("ok");
-      failures.current = 0;
-    } catch (err) {
-      failures.current += 1;
-      setSyncStatus("error");
-      setSyncError(err instanceof Error ? err.message : "שגיאת סנכרון לא ידועה");
-      if (failures.current <= 2) {
-        pushAlert("הסנכרון מול גיליון דשבורד_הזמנות נכשל", "critical");
-      }
-    }
-  }, [sourceMode, sheetUrl, pushAlert, announceChanges]);
+    },
+    [sourceMode, sheetUrl, pushAlert, announceChanges],
+  );
 
   /* Manual write-back functions */
   const syncStatusToSheet = useCallback(
@@ -1132,7 +1148,7 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setPollingSeconds = useCallback((seconds: number) => {
-    const safe = Math.min(600, Math.max(30, seconds || 45));
+    const safe = Math.min(600, Math.max(10, seconds || 15));
     setPollingSecondsState(safe);
     try {
       const raw = localStorage.getItem(SOURCE_CONFIG_STORAGE_KEY);
@@ -1189,11 +1205,23 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
         void run();
       }
     };
+    const onOnline = () => {
+      if (timer) clearTimeout(timer);
+      void run();
+    };
+    const onFocus = () => {
+      if (timer) clearTimeout(timer);
+      void run();
+    };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("focus", onFocus);
     return () => {
       disposed = true;
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("focus", onFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceMode, sheetUrl, pollingSeconds]);
@@ -1264,6 +1292,22 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     const id = setInterval(tick, 30000);
     return () => clearInterval(id);
   }, [published, pushAlert]);
+
+  /* ---------------- Autonomous Real-Time Inventory Deficit Monitor (No Human Touch) ---------------- */
+  const alertedCriticalSkusRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    liveInventory.items.forEach((item) => {
+      if (item.isCritical && !alertedCriticalSkusRef.current.has(item.sku)) {
+        alertedCriticalSkusRef.current.add(item.sku);
+        const msg = `🚨 התראת מלאי אוטומטית: יתרת ${item.name} ירדה ל-${item.currentStock} ${item.unit} (סף: ${item.safetyStockLevel}). ${item.recommendedOrder}`;
+        pushAlert(msg, "critical", true);
+        playAlarmSound();
+        if (voiceAnnounceEnabled) {
+          void speakHebrew(`התראת מלאי אוטומטית. יתרת ${item.name} קריטית.`);
+        }
+      }
+    });
+  }, [liveInventory, pushAlert, voiceAnnounceEnabled]);
 
   /* ---------------- AI Briefing Generator ---------------- */
   const generateAIBriefing = useCallback(
@@ -1513,6 +1557,10 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     currentTime,
     recentlyChangedOrderIds,
     recordOrderChange,
+    /* automated real-time inventory */
+    liveInventory,
+    activeWarehouseFilter,
+    setActiveWarehouseFilter,
     /* picker workflow */
     startPicking,
     finishPicking,

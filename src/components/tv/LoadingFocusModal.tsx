@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -16,6 +17,11 @@ import { cn } from "@/lib/utils";
 
 export function LoadingFocusModal({ order }: { order: Order | null }) {
   const { currentTime, recentlyChangedOrderIds } = useDispatchBoard();
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   if (!order) return null;
 
@@ -86,7 +92,8 @@ export function LoadingFocusModal({ order }: { order: Order | null }) {
                     )}
                     {isApproaching && !isDelayed && (
                       <span>
-                        <Flame className="mr-0.5 inline size-3" /> מועד קרוב: עוד {diffMinutes} דק׳
+                        <Flame className="mr-0.5 inline size-3" /> מועד קרוב: עוד{" "}
+                        {isMounted ? diffMinutes : 15} דק׳
                       </span>
                     )}
                     {isRecentlyChanged && !isDelayed && !isApproaching && (

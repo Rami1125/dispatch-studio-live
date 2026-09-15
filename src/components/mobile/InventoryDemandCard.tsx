@@ -315,30 +315,32 @@ export function InventoryDemandCard({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition-all">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all">
       {/* Header Bar */}
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="p-3.5 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-800/60 transition-colors"
+        className="p-3.5 bg-slate-50/90 dark:bg-gradient-to-r dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <div className="size-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+          <div className="size-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
             <TrendingUp className="size-4" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm font-black text-white">סיכום יציאות ודרישת מלאי להיום</h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                סיכום יציאות ודרישת מלאי להיום
+              </h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30">
                 {warehouseName}
               </span>
               {lowStockCount > 0 && (
-                <span className="flex items-center gap-1 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-300 ring-1 ring-rose-500/50 animate-pulse">
-                  <Flame className="size-3 text-rose-400" />
+                <span className="flex items-center gap-1 rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-black text-rose-700 dark:text-rose-300 ring-1 ring-rose-500/50 animate-pulse">
+                  <Flame className="size-3 text-rose-500 dark:text-rose-400" />
                   <span>{lowStockCount} מתחת לסף ביטחון</span>
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               {relevantOrders.length} הזמנות יצאו/בהכנה · {aggregatedDemand.length} מק"טים פעילים
             </p>
           </div>
@@ -346,11 +348,11 @@ export function InventoryDemandCard({
 
         <div className="flex items-center gap-2">
           {aggregatedDemand.length > 0 && (
-            <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+            <span className="text-[11px] font-mono font-bold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-500/10 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-500/20">
               {aggregatedDemand.length} פריטים לרכש
             </span>
           )}
-          <button className="p-1 text-slate-400 hover:text-white">
+          <button className="p-1 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
             {isOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
           </button>
         </div>

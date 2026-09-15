@@ -73,6 +73,49 @@ export default {
         }
       }
 
+      // Handle Server-Side Google Sheets CSV Fetch Proxy (bypasses browser CORS & network blocks)
+      if (url.pathname === "/api/sheets/orders" && request.method === "GET") {
+        try {
+          const sheetTargetUrl =
+            url.searchParams.get("url") ||
+            "https://docs.google.com/spreadsheets/d/1VA9J6n9IYcooO_s2xOpnkvyDQWWQD3pfhh0cnenCkoA/gviz/tq?tqx=out:csv&sheet=" +
+              encodeURIComponent("דשבורד_הזמנות");
+
+          const sep = sheetTargetUrl.includes("?") ? "&" : "?";
+          const cacheBustedUrl = `${sheetTargetUrl}${sep}_t=${Date.now()}`;
+
+          const res = await fetch(cacheBustedUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SabanOS/2.0",
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              Pragma: "no-cache",
+            },
+          });
+
+          if (!res.ok) {
+            return new Response(JSON.stringify({ error: `Sheet error: ${res.status}` }), {
+              status: res.status,
+              headers: { "content-type": "application/json; charset=utf-8" },
+            });
+          }
+
+          const csvText = await res.text();
+          return new Response(csvText, {
+            status: 200,
+            headers: {
+              "content-type": "text/csv; charset=utf-8",
+              "cache-control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            },
+          });
+        } catch (err) {
+          console.error("Error proxying sheet in /api/sheets/orders:", err);
+          return new Response(
+            JSON.stringify({ error: err instanceof Error ? err.message : "Failed to fetch sheet" }),
+            { status: 502, headers: { "content-type": "application/json; charset=utf-8" } },
+          );
+        }
+      }
+
       // Handle Google Sheets Status Write-Back
       if (url.pathname === "/api/sheets/update-status" && request.method === "POST") {
         try {

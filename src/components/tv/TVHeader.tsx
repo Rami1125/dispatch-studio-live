@@ -60,8 +60,10 @@ export function TVHeader({
   } = useDispatchBoard();
   const now = useClock();
   const [isMuted, setIsMuted] = useState(isAudioMuted());
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     return subscribeSoundMute((muted) => setIsMuted(muted));
   }, []);
 
@@ -170,13 +172,19 @@ export function TVHeader({
         <button
           onClick={() => setScreensaverActive(true)}
           className="flex items-center gap-2 rounded-xl bg-secondary/80 px-3 py-2 text-xs font-bold text-foreground ring-1 ring-border transition hover:bg-primary hover:text-primary-foreground"
-          title={`הפעל שומר מסך (הזמנה קרובה: ${nearestOrderMinutesRemaining !== null && nearestOrderMinutesRemaining < 900 ? `${nearestOrderMinutesRemaining} דק'` : "ללא הזמנות"})`}
+          title={
+            isMounted && nearestOrderMinutesRemaining !== null && nearestOrderMinutesRemaining < 900
+              ? `הפעל שומר מסך (הזמנה קרובה: ${nearestOrderMinutesRemaining} דק')`
+              : "הפעל שומר מסך"
+          }
         >
           <Monitor className="size-4" />
           <span>שומר מסך</span>
-          {nearestOrderMinutesRemaining !== null && nearestOrderMinutesRemaining >= 45 && (
-            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-          )}
+          {isMounted &&
+            nearestOrderMinutesRemaining !== null &&
+            nearestOrderMinutesRemaining >= 45 && (
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+            )}
         </button>
 
         {/* Live Traffic & Waze Map Button */}
