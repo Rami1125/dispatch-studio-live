@@ -32,8 +32,11 @@ export interface Warehouse {
 
 export interface Order {
   orderId: string;
+  customerNumber?: string;
   customerName: string;
+  /** עמודה D: כתובת פריקה מדויקת */
   address: string;
+  /** עמודה E: עיר פריקה */
   city: string;
   warehouse: string;
   driver: string;
@@ -49,6 +52,12 @@ export interface Order {
   assignedPicker?: string;
   deposits?: string[];
   itemsFormatted?: string;
+  /** עמודה O: קישור Waze לניווט ישיר */
+  wazeUrl?: string;
+  deliveryNote?: string;
+  driveFolderUrl?: string;
+  orderFileUrl?: string;
+  lifoOrder?: number;
 }
 
 export type AlertLevel = "info" | "warning" | "critical" | "success";

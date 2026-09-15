@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import {
   Cloud,
   CloudOff,
+  Compass,
   Mic,
   Monitor,
   Radio,
@@ -36,7 +37,13 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: st
   );
 }
 
-export function TVHeader({ onSwitchToPicker }: { onSwitchToPicker?: () => void }) {
+export function TVHeader({
+  onSwitchToPicker,
+  onOpenTraffic,
+}: {
+  onSwitchToPicker?: () => void;
+  onOpenTraffic?: () => void;
+}) {
   const {
     counts,
     published,
@@ -171,6 +178,20 @@ export function TVHeader({ onSwitchToPicker }: { onSwitchToPicker?: () => void }
             <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
           )}
         </button>
+
+        {/* Live Traffic & Waze Map Button */}
+        {onOpenTraffic && (
+          <button
+            type="button"
+            onClick={onOpenTraffic}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-950 to-slate-900 hover:from-sky-900 hover:to-slate-800 border border-sky-500/40 px-3 py-2 text-xs font-bold text-sky-200 transition-all shadow-sm group"
+            title="פתח מפת פקקים חיה, שידורי Waze ומעקב משאיות סבן"
+          >
+            <Compass className="size-4 text-sky-400 group-hover:rotate-45 transition-transform" />
+            <span>פקקים & Waze</span>
+            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+          </button>
+        )}
 
         {/* Admin Control Plane Link */}
         <a

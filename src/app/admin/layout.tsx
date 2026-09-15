@@ -6,6 +6,7 @@ import {
   Film,
   Radio,
   ClipboardList,
+  Compass,
   ShieldCheck,
   ShieldAlert,
   Moon,
@@ -66,6 +67,13 @@ export const ADMIN_NAV_ITEMS = [
     icon: Radio,
     badge: "LIVE",
     description: "התראות מתפרצות, כריזה ובאנרים",
+  },
+  {
+    path: "/admin/traffic",
+    label: "מפת פקקים ו-Waze",
+    icon: Compass,
+    badge: "חי",
+    description: "Waze Live Map ומעקב עומסי צירי השרון ומשאיות",
   },
   {
     path: "/admin/audit",

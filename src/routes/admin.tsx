@@ -9,6 +9,8 @@ import SheetsMappingPage from "@/app/admin/sheets-mapping/page";
 import MediaPage from "@/app/admin/media/page";
 import OverridesPage from "@/app/admin/overrides/page";
 import AuditPage from "@/app/admin/audit/page";
+import { TrafficLiveDashboard } from "@/components/traffic/TrafficLiveDashboard";
+import { DispatchProvider } from "@/context/DispatchContext";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -16,7 +18,8 @@ export const Route = createFileRoute("/admin")({
       { title: "SabanOS Enterprise · מרכז שליטה ובקרה (Admin Control Plane)" },
       {
         name: "description",
-        content: "מערכת ניהול ובקרה מרכזית עבור ח. סבן חומרי בניין (1994) בע״מ ו-Noa AI Logistics Hub.",
+        content:
+          "מערכת ניהול ובקרה מרכזית עבור ח. סבן חומרי בניין (1994) בע״מ ו-Noa AI Logistics Hub.",
       },
     ],
   }),
@@ -104,6 +107,15 @@ function AdminRouteComponent() {
     }
     if (currentPath === "/admin/overrides") {
       return <OverridesPage />;
+    }
+    if (currentPath === "/admin/traffic") {
+      return (
+        <DispatchProvider>
+          <div className="p-1">
+            <TrafficLiveDashboard />
+          </div>
+        </DispatchProvider>
+      );
     }
     if (currentPath === "/admin/audit") {
       return <AuditPage />;

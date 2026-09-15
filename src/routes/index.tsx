@@ -11,6 +11,7 @@ import { NoaFlashOverlay } from "@/components/tv/NoaFlashOverlay";
 import { StudioDrawer } from "@/components/studio/StudioDrawer";
 import { DispatchScreensaver } from "@/components/screensaver/DispatchScreensaver";
 import { PickerView } from "@/components/mobile/PickerView";
+import { TrafficLiveDashboard } from "@/components/traffic/TrafficLiveDashboard";
 import type { Order } from "@/types/dispatch";
 
 export const Route = createFileRoute("/")({
@@ -59,12 +60,17 @@ function LiveBoard() {
   const { published, focusOrder } = useDispatchBoard();
 
   const [viewMode, setViewMode] = useState<"tv" | "picker">("tv");
+  const [isTrafficOpen, setIsTrafficOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       const modeParam = urlParams.get("mode");
       const pickerParam = urlParams.get("picker");
+      const trafficParam = urlParams.get("traffic");
+      if (trafficParam === "1" || trafficParam === "true" || modeParam === "traffic") {
+        setIsTrafficOpen(true);
+      }
       if (modeParam === "picker" || pickerParam === "oren" || pickerParam === "tamir") {
         setViewMode("picker");
         return;
@@ -108,9 +114,23 @@ function LiveBoard() {
   if (viewMode === "picker") {
     return (
       <div dir="rtl" className="min-h-screen bg-slate-950">
-        <PickerView onSwitchToTv={() => handleSetViewMode("tv")} />
+        <PickerView
+          onSwitchToTv={() => handleSetViewMode("tv")}
+          onOpenTraffic={() => setIsTrafficOpen(true)}
+        />
         <StudioDrawer />
         <NoaFlashOverlay />
+
+        {/* Traffic Live Modal for Picker if opened */}
+        <AnimatePresence>
+          {isTrafficOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-md">
+              <div className="w-full max-w-6xl max-h-[95vh] overflow-hidden">
+                <TrafficLiveDashboard onClose={() => setIsTrafficOpen(false)} isModal />
+              </div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -121,7 +141,10 @@ function LiveBoard() {
       className="flex h-screen w-screen flex-col gap-2.5 overflow-hidden bg-background p-3"
     >
       <UrgentDeliveriesTicker />
-      <TVHeader onSwitchToPicker={() => handleSetViewMode("picker")} />
+      <TVHeader
+        onSwitchToPicker={() => handleSetViewMode("picker")}
+        onOpenTraffic={() => setIsTrafficOpen(true)}
+      />
       <NoaAIBanner />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[1.15fr_1fr]">
@@ -136,6 +159,17 @@ function LiveBoard() {
           ))}
         </div>
       </div>
+
+      {/* Traffic Live Modal for TV */}
+      <AnimatePresence>
+        {isTrafficOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md">
+            <div className="w-full max-w-6xl max-h-[95vh] overflow-hidden shadow-2xl">
+              <TrafficLiveDashboard onClose={() => setIsTrafficOpen(false)} isModal />
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <StudioDrawer />
       <NoaFlashOverlay />

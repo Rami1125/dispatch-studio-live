@@ -33,6 +33,7 @@ import {
   TrendingUp,
   Sun,
   Moon,
+  Compass,
 } from "lucide-react";
 import { useDispatchBoard } from "@/context/DispatchContext";
 import type { Order, OrderStatus } from "@/types/dispatch";
@@ -54,6 +55,7 @@ export type PickerProfile = "oren" | "tamir" | "all";
 
 interface PickerViewProps {
   onSwitchToTv?: () => void;
+  onOpenTraffic?: () => void;
 }
 
 function LiveKpiBanner({ orders }: { orders: Order[] }) {
@@ -115,7 +117,7 @@ function LiveKpiBanner({ orders }: { orders: Order[] }) {
   );
 }
 
-export function PickerView({ onSwitchToTv }: PickerViewProps) {
+export function PickerView({ onSwitchToTv, onOpenTraffic }: PickerViewProps) {
   const {
     published,
     startPicking,
@@ -320,6 +322,19 @@ export function PickerView({ onSwitchToTv }: PickerViewProps) {
                 className={cn("size-4", syncStatus === "syncing" && "animate-spin text-sky-400")}
               />
             </button>
+
+            {/* Traffic & Waze Live Map */}
+            {onOpenTraffic && (
+              <button
+                type="button"
+                onClick={onOpenTraffic}
+                title="מפת פקקים חיה ו-Waze למשאיות סבן"
+                className="p-2 rounded-lg bg-sky-950 border border-sky-600/40 text-sky-300 hover:bg-sky-900 transition-colors flex items-center justify-center relative"
+              >
+                <Compass className="size-4 text-sky-400" />
+                <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-400 animate-ping" />
+              </button>
+            )}
 
             {/* Switch to TV Dashboard */}
             {onSwitchToTv && (
