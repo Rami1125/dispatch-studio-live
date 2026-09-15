@@ -32,7 +32,7 @@ export const KNOWN_CITY_COORDINATES: Record<string, GeoPoint> = {
     region: "הוד השרון",
     isWarehouse: true,
   },
-  "מחסן 4": { lat: 32.1485, lon: 34.8967, defaultZoom: 16, region: "הוד השרון", isWarehouse: true },
+  "מחסן 4": { lat: 32.132702508642204, 34.89817514726974, defaultZoom: 16, region: "הוד השרון", isWarehouse: true },
   "מחסן 1": { lat: 32.1432, lon: 34.8912, defaultZoom: 16, region: "הוד השרון", isWarehouse: true },
   "מחסן 30": { lat: 32.149, lon: 34.895, defaultZoom: 16, region: "הוד השרון", isWarehouse: true },
   "מחסן 7": { lat: 32.148, lon: 34.897, defaultZoom: 16, region: "הוד השרון", isWarehouse: true },
