@@ -27,6 +27,8 @@ import {
   getActiveFleetTraffic,
   buildDeliveryPresetsFromOrders,
   getCoordinatesForCity,
+  resolveGeoCoordinates,
+  detectCityFromAddress,
   buildWazeSearchUrl,
 } from "@/services/trafficService";
 import type { LocationPreset, TrafficAlert, TruckRouteInfo } from "@/types/traffic";
@@ -84,17 +86,22 @@ export function TrafficLiveDashboard({
 
   // Focus directly on an order's unloading destination (Columns D & E)
   const handleFocusOrderOnMap = (order: Order) => {
-    const coords = getCoordinatesForCity(order.city);
+    if (!order) return;
+    const address = order.address || "";
+    const city = order.city || detectCityFromAddress(address);
+    const customerName = order.customerName || "לקוח";
+    const driver = order.driver || "לא שובץ";
+    const geo = resolveGeoCoordinates(city || address);
     const orderPreset: LocationPreset = {
       id: `order-preset-${order.orderId}`,
-      label: `הזמנה #${order.orderId} - ${order.customerName}`,
-      shortLabel: `${order.city} (${order.orderId})`,
+      label: `הזמנה #${order.orderId} - ${customerName}`,
+      shortLabel: `${geo.cityName || city || "יעד"} (${order.orderId})`,
       icon: "📍",
-      lat: coords.lat,
-      lon: coords.lon,
-      zoom: 15,
-      description: `כתובת פריקה: ${order.address}, ${order.city} | נהג: ${order.driver}`,
-      pinText: `${order.customerName} - ${order.address}`,
+      lat: geo.lat,
+      lon: geo.lon,
+      zoom: geo.defaultZoom || 15,
+      description: `כתובת פריקה: ${address}, ${city} | נהג: ${driver}`,
+      pinText: `${customerName} - ${address}`,
     };
     setSelectedPreset(orderPreset);
     // Scroll smoothly to map
@@ -110,12 +117,15 @@ export function TrafficLiveDashboard({
 
   // Filter orders
   const filteredOrders = useMemo(() => {
+    if (!Array.isArray(published)) return [];
     return published.filter((o) => {
+      if (!o) return false;
       if (activeTab === "in_transit") {
         return o.status === "יצא לדרך" || o.status === "בהעמסה";
       }
       if (activeTab === "crane") {
-        return o.driver.includes("מנוף") || o.driver.includes("חכמת");
+        const d = o.driver || "";
+        return d.includes("מנוף") || d.includes("חכמת");
       }
       return true;
     });

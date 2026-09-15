@@ -48,6 +48,26 @@ export const LOCATION_PRESETS: LocationPreset[] = [
     zoom: 12,
     description: "איילון (כביש 20), ציר ז'בוטינסקי ומחלף מורשה",
   },
+  {
+    id: "triangle_north",
+    label: "המשולש והשרון הצפוני",
+    shortLabel: "המשולש / צפון",
+    icon: "🧭",
+    lat: 32.2662,
+    lon: 34.9814,
+    zoom: 12,
+    description: "כביש 444, טייבה, טירה, קלנסווה וציר כביש 6 צפון",
+  },
+  {
+    id: "east_shomron",
+    label: "מזרח, מודיעין ושומרון",
+    shortLabel: "מודיעין / שומרון",
+    icon: "⛰️",
+    lat: 32.0772,
+    lon: 35.0555,
+    zoom: 12,
+    description: "כביש 5 חוצה שומרון, מודיעין, עלי זהב ואריאל",
+  },
 ];
 
 // ==========================================
@@ -104,48 +124,52 @@ export const INITIAL_TRAFFIC_ALERTS: TrafficAlert[] = [
   },
 ];
 
-// City coordinate lookup for dynamic presets
-const KNOWN_CITY_COORDINATES: Record<string, { lat: number; lon: number }> = {
-  רעננה: { lat: 32.1844, lon: 34.8707 },
-  "כפר סבא": { lat: 32.175, lon: 34.9069 },
-  "הוד השרון": { lat: 32.155, lon: 34.893 },
-  מודיעין: { lat: 31.8903, lon: 35.0104 },
-  "בני ציון": { lat: 32.2222, lon: 34.869 },
-  הרצליה: { lat: 32.1663, lon: 34.8432 },
-  "תל אביב": { lat: 32.0853, lon: 34.7818 },
-  "פתח תקווה": { lat: 32.084, lon: 34.8878 },
-  נתניה: { lat: 32.3215, lon: 34.8532 },
+import {
+  type GeoPoint,
+  KNOWN_CITY_COORDINATES,
+  resolveGeoCoordinates,
+  detectCityFromAddress,
+  buildWazeSearchUrl,
+  buildGoogleMapsUrl,
+  registerCustomCoordinates,
+} from "@/constants/geo";
+
+export {
+  type GeoPoint,
+  KNOWN_CITY_COORDINATES,
+  resolveGeoCoordinates,
+  detectCityFromAddress,
+  buildWazeSearchUrl,
+  buildGoogleMapsUrl,
+  registerCustomCoordinates,
 };
 
-export function getCoordinatesForCity(city: string): { lat: number; lon: number } {
-  const cleanCity = city.trim();
-  for (const [key, coords] of Object.entries(KNOWN_CITY_COORDINATES)) {
-    if (cleanCity.includes(key) || key.includes(cleanCity)) {
-      return coords;
-    }
-  }
-  return { lat: 32.155, lon: 34.893 }; // Default Hod Hasharon
+export function getCoordinatesForCity(cityOrAddress?: string): { lat: number; lon: number } {
+  const resolved = resolveGeoCoordinates(cityOrAddress);
+  return { lat: resolved.lat, lon: resolved.lon };
 }
 
 /**
  * Builds dynamic LocationPresets from the real orders in דשבורד_הזמנות
- * Uses exact Column D (כתובת פריקה) and Column E (עיר).
+ * Uses exact Column D (כתובת פריקה) and Column E (עיר) with smart coordinate resolution.
  */
-export function buildDeliveryPresetsFromOrders(orders: Order[]): LocationPreset[] {
+export function buildDeliveryPresetsFromOrders(orders?: Order[]): LocationPreset[] {
+  if (!orders || !Array.isArray(orders)) return [];
   return orders
-    .filter((o) => o.address && o.city)
+    .filter((o) => o && (o.address || o.city))
     .map((o) => {
-      const coords = getCoordinatesForCity(o.city);
+      const city = o.city || detectCityFromAddress(o.address);
+      const coords = resolveGeoCoordinates(city || o.address);
       return {
         id: `order-preset-${o.orderId}`,
-        label: `#${o.orderId} - ${o.customerName} (${o.city})`,
-        shortLabel: `${o.city} (#${o.orderId})`,
+        label: `#${o.orderId} - ${o.customerName || "לקוח"} (${city})`,
+        shortLabel: `${city} (#${o.orderId})`,
         icon: "📍",
         lat: coords.lat,
         lon: coords.lon,
-        zoom: 15,
-        description: `כתובת פריקה: ${o.address}, ${o.city} | נהג: ${o.driver} | סטטוס: ${o.status}`,
-        pinText: `${o.customerName} - ${o.address}`,
+        zoom: coords.defaultZoom || 15,
+        description: `כתובת פריקה: ${o.address || "ללא כתובת"}, ${city} | נהג: ${o.driver || "לא שובץ"} | סטטוס: ${o.status || ""}`,
+        pinText: `${o.customerName || ""} - ${o.address || city}`,
       };
     });
 }
@@ -160,36 +184,55 @@ export function getActiveFleetTraffic(orders?: Order[]): TruckRouteInfo[] {
     return d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
   };
 
+  const safeOrders = Array.isArray(orders) ? orders : [];
+
   // Find real orders for Hikmat
   const hikmatOrder =
-    orders?.find(
+    safeOrders.find(
       (o) =>
+        o?.driver &&
         (o.driver.includes("חכמת") || o.driver.includes("מרצדס") || o.driver.includes("מנוף")) &&
         (o.status === "בהעמסה" ||
           o.status === "יצא לדרך" ||
           o.status === "בהכנה" ||
           o.status === "מוכן להעמסה"),
     ) ||
-    orders?.find(
-      (o) => o.driver.includes("חכמת") || o.driver.includes("מרצדס") || o.driver.includes("מנוף"),
+    safeOrders.find(
+      (o) =>
+        o?.driver &&
+        (o.driver.includes("חכמת") || o.driver.includes("מרצדס") || o.driver.includes("מנוף")),
     );
 
   // Find real orders for Ali
   const aliOrder =
-    orders?.find(
+    safeOrders.find(
       (o) =>
+        o?.driver &&
         (o.driver.includes("עלי") || o.driver.includes("איסוזו")) &&
         (o.status === "בהעמסה" ||
           o.status === "יצא לדרך" ||
           o.status === "מוכן להעמסה" ||
           o.status === "בהכנה"),
-    ) || orders?.find((o) => o.driver.includes("עלי") || o.driver.includes("איסוזו"));
+    ) ||
+    safeOrders.find((o) => o?.driver && (o.driver.includes("עלי") || o.driver.includes("איסוזו")));
 
   // Coordinates from real cities in sheet
   const hikmatCoords = hikmatOrder
     ? getCoordinatesForCity(hikmatOrder.city)
     : { lat: 32.1844, lon: 34.8707 };
   const aliCoords = aliOrder ? getCoordinatesForCity(aliOrder.city) : { lat: 32.175, lon: 34.9069 };
+
+  const hikmatCargoSummary = hikmatOrder?.itemsFormatted
+    ? hikmatOrder.itemsFormatted
+    : hikmatOrder?.logisticsMetrics
+      ? `${hikmatOrder.logisticsMetrics.bellaBags || 0} בלות + ${hikmatOrder.logisticsMetrics.sabanPallets || 0} משטחי סבן`
+      : "2 בלות סומסום, 3 בלות חול, 6 מלט, 10 טיח MP75";
+
+  const aliCargoSummary = aliOrder?.itemsFormatted
+    ? aliOrder.itemsFormatted
+    : aliOrder?.logisticsMetrics
+      ? `${aliOrder.logisticsMetrics.bellaBags || 0} בלות + ${aliOrder.logisticsMetrics.sabanPallets || 0} משטחי סבן`
+      : '25 מלט אפור 25 ק"ג, 25 טיט שק, 1 פוליגג';
 
   const hikmatTruck: TruckRouteInfo = {
     id: "hikmat",
@@ -207,10 +250,7 @@ export function getActiveFleetTraffic(orders?: Order[]): TruckRouteInfo[] {
     delayMinutes: 14,
     primaryCorridor: "כביש 531 מערב",
     etaTime: formatEta(32),
-    cargoSummary: hikmatOrder
-      ? hikmatOrder.itemsFormatted ||
-        `${hikmatOrder.logisticsMetrics.bellaBags} בלות + ${hikmatOrder.logisticsMetrics.sabanPallets} משטחי סבן`
-      : "2 בלות סומסום, 3 בלות חול, 6 מלט, 10 טיח MP75",
+    cargoSummary: hikmatCargoSummary,
     status:
       hikmatOrder?.status === "בהעמסה"
         ? "loading"
@@ -244,10 +284,7 @@ export function getActiveFleetTraffic(orders?: Order[]): TruckRouteInfo[] {
     delayMinutes: 7,
     primaryCorridor: "כביש 40 צפון / בן יהודה",
     etaTime: formatEta(21),
-    cargoSummary: aliOrder
-      ? aliOrder.itemsFormatted ||
-        `${aliOrder.logisticsMetrics.bellaBags} בלות + ${aliOrder.logisticsMetrics.sabanPallets} משטחי סבן`
-      : '25 מלט אפור 25 ק"ג, 25 טיט שק, 1 פוליגג',
+    cargoSummary: aliCargoSummary,
     status:
       aliOrder?.status === "בהעמסה"
         ? "loading"
@@ -277,10 +314,6 @@ export function buildWazeEmbedUrl(preset: LocationPreset): string {
 
 export function buildWazeNavigationUrl(lat: number, lon: number): string {
   return `https://www.waze.com/ul?ll=${lat},${lon}&navigate=yes`;
-}
-
-export function buildWazeSearchUrl(addressQuery: string): string {
-  return `https://www.waze.com/ul?q=${encodeURIComponent(addressQuery)}&navigate=yes`;
 }
 
 // ==========================================
