@@ -69,6 +69,7 @@ export const KNOWN_CITY_COORDINATES: Record<string, GeoPoint> = {
   "צור נתן": { lat: 32.231, lon: 35.021, defaultZoom: 14, region: "השרון המזרחי" },
   "ג'לג'וליה": { lat: 32.155, lon: 34.954, defaultZoom: 14, region: "השרון המזרחי" },
   "כפר קאסם": { lat: 32.115, lon: 34.975, defaultZoom: 13, region: "המשולש" },
+  "חריש": { lat: 32.4578, lon: 35.0489, defaultZoom: 15, region: "שרון צפוני" },
 
   // --- גוש דן, בקעת אונו ומרכז ---
   "פתח תקווה": { lat: 32.084, lon: 34.8878, defaultZoom: 13, region: "מרכז" },
