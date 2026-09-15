@@ -1178,7 +1178,8 @@ export function DispatchProvider({ children }: { children: ReactNode }) {
     const run = async () => {
       await syncNow();
       if (disposed) return;
-      const retryDelay = failures.current > 0 ? Math.min(30, 5 * 2 ** (failures.current - 1)) : pollingSeconds;
+      const retryDelay =
+        failures.current > 0 ? Math.min(30, 5 * 2 ** (failures.current - 1)) : pollingSeconds;
       schedule(retryDelay * 1000);
     };
     void run();

@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { ThemeController } from "../hooks/useTheme";
 
 function NotFoundComponent() {
   return (
@@ -132,6 +133,7 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        <ThemeController />
         {children}
         <Scripts />
       </body>

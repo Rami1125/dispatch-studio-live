@@ -11,13 +11,20 @@ const cache = new Map<string, { orders: Order[]; storedAt: number }>();
 const wait = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     const timer = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timer);
-      reject(new DOMException("Sync cancelled", "AbortError"));
-    }, { once: true });
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException("Sync cancelled", "AbortError"));
+      },
+      { once: true },
+    );
   });
 
-export async function fetchOrdersWithResilience(url: string, signal?: AbortSignal): Promise<Order[]> {
+export async function fetchOrdersWithResilience(
+  url: string,
+  signal?: AbortSignal,
+): Promise<Order[]> {
   const cached = cache.get(url);
   if (cached && Date.now() - cached.storedAt < CACHE_TTL_MS) return cached.orders;
 
@@ -41,10 +48,14 @@ export async function fetchOrdersWithResilience(url: string, signal?: AbortSigna
   })();
 
   inFlight.set(url, { promise, startedAt: Date.now() });
-  try { return await promise; } finally { inFlight.delete(url); }
+  try {
+    return await promise;
+  } finally {
+    inFlight.delete(url);
+  }
 }
 
 export function clearSheetSyncCache(url?: string) {
-  if (url) cache.delete(url); else cache.clear();
+  if (url) cache.delete(url);
+  else cache.clear();
 }
-
