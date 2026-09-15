@@ -172,6 +172,16 @@ export function TVHeader({ onSwitchToPicker }: { onSwitchToPicker?: () => void }
           )}
         </button>
 
+        {/* Admin Control Plane Link */}
+        <a
+          href="/admin"
+          className="flex items-center gap-2 rounded-xl bg-sky-950/80 hover:bg-sky-900 border border-sky-600/50 px-3 py-2 text-xs font-bold text-sky-200 transition-all shadow-sm"
+          title="מרכז שליטה ובקרה למנהל מערכת (SabanOS Control Plane)"
+        >
+          <span className="size-2 rounded-full bg-sky-400 animate-pulse" />
+          <span>בקרה מרכזית</span>
+        </a>
+
         <div
           style={{ paddingLeft: "2px", paddingRight: "-7px" }}
           className={cn(
